@@ -785,6 +785,57 @@ fn opening_a_schema_2_cineon_converter_without_gamma_gives_linear_output() {
     }
 }
 
+/// A precomp instance that overrides an exposed Cineon Converter Gamma in a project saved
+/// before schema 3 has its Essential Properties value converted too, so it renders as before.
+#[test]
+fn opening_a_schema_2_project_converts_an_overridden_cineon_gamma() {
+    let mut s = Session::default();
+    s.execute("file.projectSettings", json!({"bitDepth": 32})).unwrap();
+    s.execute("comp.new", json!({"name": "Inner", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let inner = s.active_comp_id().unwrap();
+    let solid = s.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+    let input = s.render(inner, Tick::ZERO, Default::default()).get(4, 4);
+    apply(&mut s, solid, "Cineon Converter");
+    s.execute("prop.set", json!({"layer": solid, "path": "effects/#1/highlightRolloff", "value": 0.0})).unwrap();
+    s.execute("prop.set", json!({"layer": solid, "path": "effects/#1/gamma", "value": 1.7})).unwrap();
+    let control = s.execute("essential.addProperty", json!({"layer": solid, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+    // A hidden solid whose Gamma control also drives its Opacity: one value cannot keep both
+    // renders, so its instance value stays as saved.
+    let mixed_layer = s.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+    apply(&mut s, mixed_layer, "Cineon Converter");
+    let mixed = s.execute("essential.addProperty", json!({"layer": mixed_layer, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("essential.linkProperty", json!({"control": mixed, "layer": mixed_layer, "path": "transform/opacity"})).unwrap();
+    s.execute("layer.setSwitch", json!({"layers": [mixed_layer], "switch": "video", "value": false})).unwrap();
+    s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let main = s.active_comp_id().unwrap();
+    let inst = s.execute("layer.addItem", json!({"item": inner.0})).unwrap()["layer"].as_u64().unwrap();
+    // Old-scale value: 2.2.
+    s.execute("essential.set", json!({"layer": inst, "control": control, "value": 2.2})).unwrap();
+    s.execute("essential.set", json!({"layer": inst, "control": mixed, "value": 2.2})).unwrap();
+
+    let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+    old["schema"] = json!(2);
+    let dir = std::env::temp_dir().join(format!("ec-cineon-essential-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.ecproj").to_string_lossy().to_string();
+    std::fs::write(&path, old.to_string()).unwrap();
+    let mut s2 = Session::default();
+    s2.execute("file.open", json!({"path": path})).unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+    let controls = s2.execute("essential.instance", json!({"comp": main.0, "layer": inst})).unwrap()["controls"].clone();
+    let find = |id: u64| controls.as_array().unwrap().iter().find(|c| c["control"] == id).unwrap().clone();
+    let c = find(control);
+    assert_eq!(c["overridden"], json!(true), "{c}");
+    assert!((c["value"].as_f64().unwrap() - 2.2 / 1.7).abs() < 1e-9, "{c}");
+    let m = find(mixed);
+    assert!((m["value"].as_f64().unwrap() - 2.2).abs() < 1e-9, "a control that also drives Opacity keeps its value: {m}");
+    let got = s2.render(main, Tick::ZERO, Default::default()).get(4, 4);
+    for ch in 0..3 {
+        let want = cineon_before_schema_3(input[ch], 2.2);
+        assert!((got[ch] - want).abs() < 1e-4, "channel {ch}: {} rendered, {want} before", got[ch]);
+    }
+}
+
 /// An animation preset saved before Cineon Converter's Gamma scale changed (format version 1)
 /// is converted when applied, for a saved effect and for a saved Gamma property alone; a preset
 /// saved now is applied as it is.
