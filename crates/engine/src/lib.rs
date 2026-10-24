@@ -1281,26 +1281,51 @@ pub fn upgrade_effects(p: &mut Project) {
 /// Gamma, brought onto today's scale as the Gamma itself is
 /// ([`effectcraft_effects::migrate::scale_cineon_gamma`]), so an instance's overridden Gamma
 /// renders as before. A control that also drives a property other than a Cineon Converter's
-/// Gamma keeps its instance values, since one value cannot keep both renders.
+/// Gamma keeps its instance values, since one value cannot keep both renders. A control that
+/// exposes a nested precomp's Gamma control counts as a Gamma control too.
 fn cineon_gamma_instance_values_to_unit_scale(p: &mut Project) {
     use effectcraft_project::essential;
-    let is_cineon_gamma = |l: &Layer, uid: Uid| {
-        l.props.sub("effects").is_some_and(|fx| {
+    type Controls = std::collections::HashSet<(ItemId, u64)>;
+    // A Cineon Converter's Gamma on `l`, or an Essential Properties value of `l` for a Gamma
+    // control of the comp it nests.
+    let is_gamma = |l: &Layer, uid: Uid, controls: &Controls| {
+        let direct = l.props.sub("effects").is_some_and(|fx| {
             fx.groups().any(|g| {
                 matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect } if effect == "ec.utility.cineon")
                     && g.get("gamma").is_some_and(|pr| pr.uid == uid)
             })
-        })
+        });
+        let nested = || {
+            let effectcraft_project::LayerSource::Comp { item } = l.source else { return false };
+            let mut found = false;
+            if let Some(g) = essential::group(l) {
+                g.walk("", &mut |_, pr| {
+                    found |= pr.uid == uid && essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id)));
+                });
+            }
+            found
+        };
+        direct || nested()
     };
-    let mut controls: std::collections::HashSet<(ItemId, u64)> = std::collections::HashSet::new();
-    for (cid, c) in p.comps() {
-        let Some(eg) = &c.essential else { continue };
-        for ctl in eg.flat() {
-            let targets = eg.resolve(ctl.id).map(|m| m.kind.targets()).unwrap_or_default();
-            if !targets.is_empty() && targets.iter().all(|(lid, uid)| c.layer(*lid).is_some_and(|l| is_cineon_gamma(l, *uid))) {
-                controls.insert((*cid, ctl.id));
+    let mut controls = Controls::new();
+    loop {
+        let mut added = vec![];
+        for (cid, c) in p.comps() {
+            let Some(eg) = &c.essential else { continue };
+            for ctl in eg.flat() {
+                if controls.contains(&(*cid, ctl.id)) {
+                    continue;
+                }
+                let targets = eg.resolve(ctl.id).map(|m| m.kind.targets()).unwrap_or_default();
+                if !targets.is_empty() && targets.iter().all(|(lid, uid)| c.layer(*lid).is_some_and(|l| is_gamma(l, *uid, &controls))) {
+                    added.push((*cid, ctl.id));
+                }
             }
         }
+        if added.is_empty() {
+            break;
+        }
+        controls.extend(added);
     }
     if controls.is_empty() {
         return;

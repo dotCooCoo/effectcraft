@@ -836,6 +836,41 @@ fn opening_a_schema_2_project_converts_an_overridden_cineon_gamma() {
     }
 }
 
+/// A Gamma exposed again by a middle comp, from its precomp layer's Essential Properties, is
+/// converted in the outer instance that overrides it too.
+#[test]
+fn opening_a_schema_2_project_converts_a_cineon_gamma_exposed_through_a_nested_precomp() {
+    let mut s = Session::default();
+    s.execute("comp.new", json!({"name": "Inner", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let inner = s.active_comp_id().unwrap();
+    let solid = s.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+    apply(&mut s, solid, "Cineon Converter");
+    s.execute("prop.set", json!({"layer": solid, "path": "effects/#1/gamma", "value": 1.7})).unwrap();
+    let inner_control = s.execute("essential.addProperty", json!({"layer": solid, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("comp.new", json!({"name": "Middle", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let middle = s.active_comp_id().unwrap();
+    let mid_layer = s.execute("layer.addItem", json!({"item": inner.0})).unwrap()["layer"].as_u64().unwrap();
+    let path = format!("essential/{}", effectcraft_project::essential::match_id(inner_control));
+    let control = s.execute("essential.addProperty", json!({"layer": mid_layer, "path": path})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let main = s.active_comp_id().unwrap();
+    let inst = s.execute("layer.addItem", json!({"item": middle.0})).unwrap()["layer"].as_u64().unwrap();
+    // Old-scale value: 2.2.
+    s.execute("essential.set", json!({"layer": inst, "control": control, "value": 2.2})).unwrap();
+
+    let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+    old["schema"] = json!(2);
+    let dir = std::env::temp_dir().join(format!("ec-cineon-nested-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.ecproj").to_string_lossy().to_string();
+    std::fs::write(&path, old.to_string()).unwrap();
+    let mut s2 = Session::default();
+    s2.execute("file.open", json!({"path": path})).unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+    let c = s2.execute("essential.instance", json!({"comp": main.0, "layer": inst})).unwrap()["controls"][0].clone();
+    assert!((c["value"].as_f64().unwrap() - 2.2 / 1.7).abs() < 1e-9, "{c}");
+}
+
 /// An animation preset saved before Cineon Converter's Gamma scale changed (format version 1)
 /// is converted when applied, for a saved effect and for a saved Gamma property alone; a preset
 /// saved now is applied as it is.
