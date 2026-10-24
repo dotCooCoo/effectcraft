@@ -740,6 +740,51 @@ fn opening_a_schema_2_project_keeps_what_cineon_converter_renders() {
     check(&s3);
 }
 
+/// A Cineon Converter saved before schema 3 without a Gamma property gets today's default
+/// (1, linear output) when opened, not that default divided by 1.7.
+#[test]
+fn opening_a_schema_2_cineon_converter_without_gamma_gives_linear_output() {
+    let mut s = Session::default();
+    s.execute("file.projectSettings", json!({"bitDepth": 32})).unwrap();
+    s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let l = s.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+    let cid = s.active_comp_id().unwrap();
+    let input = s.render(cid, Tick::ZERO, Default::default()).get(4, 4);
+    let fx = apply(&mut s, l, "Cineon Converter");
+    s.execute("prop.set", json!({"layer": l, "path": "effects/#1/highlightRolloff", "value": 0.0})).unwrap();
+
+    fn drop_gamma(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Object(o) => {
+                if let Some(serde_json::Value::Array(children)) = o.get_mut("children") {
+                    children.retain(|c| !(c["node"] == json!("Prop") && c["match"] == json!("gamma")));
+                }
+                o.values_mut().for_each(drop_gamma);
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(drop_gamma),
+            _ => {}
+        }
+    }
+    let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+    old["schema"] = json!(2);
+    drop_gamma(&mut old);
+    assert!(!old.to_string().contains("\"match\":\"gamma\""));
+    let dir = std::env::temp_dir().join(format!("ec-cineon-no-gamma-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.ecproj").to_string_lossy().to_string();
+    std::fs::write(&path, old.to_string()).unwrap();
+    let mut s2 = Session::default();
+    s2.execute("file.open", json!({"path": path})).unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+    let gamma = effect_group(&s2, l, fx).prop("gamma").unwrap().value.as_f64();
+    assert!((gamma - 1.0).abs() < 1e-9, "the missing Gamma gets today's default: {gamma}");
+    let got = s2.render(cid, Tick::ZERO, Default::default()).get(4, 4);
+    for c in 0..3 {
+        let want = cineon_before_schema_3(input[c], 1.7);
+        assert!((got[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want} linear", got[c]);
+    }
+}
+
 /// An animation preset saved before Cineon Converter's Gamma scale changed (format version 1)
 /// is converted when applied, for a saved effect and for a saved Gamma property alone; a preset
 /// saved now is applied as it is.

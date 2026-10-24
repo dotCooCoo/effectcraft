@@ -1257,12 +1257,13 @@ pub fn upgrade_effects(p: &mut Project) {
                 let effectcraft_project::Node::Group(g) = n else { continue };
                 let effectcraft_project::GroupKind::Effect { effect } = &g.kind else { continue };
                 if let Some(spec) = effectcraft_effects::find(effect) {
+                    // Before `upgrade_instance`, so a Gamma it adds keeps today's default.
+                    if unit_gamma {
+                        effectcraft_effects::migrate::cineon_gamma_to_unit_scale(spec.id, g);
+                    }
                     effectcraft_effects::migrate::upgrade_instance(spec, g, &mut effectcraft_project::build::Ids(&mut next), size);
                     if to_effect_space {
                         effectcraft_effects::migrate::to_effect_space(spec, g, size, d, &clone_d);
-                    }
-                    if unit_gamma {
-                        effectcraft_effects::migrate::cineon_gamma_to_unit_scale(spec.id, g);
                     }
                 }
             }
