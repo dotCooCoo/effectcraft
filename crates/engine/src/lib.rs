@@ -1317,7 +1317,10 @@ impl Session {
 
 /// Bring effect instances saved by earlier versions up to date with the effect registry
 /// (renamed / regrouped / added parameters, reordered popups; see
-/// [`effectcraft_effects::migrate`]), and a project from before
+/// [`effectcraft_effects::migrate`]), Cineon Converter's Gamma and the Essential Properties
+/// values that expose it in a project from before
+/// [`effectcraft_project::SCHEMA_CINEON_GAMMA`] onto today's scale
+/// ([`effectcraft_effects::migrate::cineon_gamma_to_unit_scale`]), and a project from before
 /// [`effectcraft_project::SCHEMA_EFFECT_SPACE`] into effect space
 /// ([`effectcraft_effects::migrate::to_effect_space`]). Stamps the current schema.
 pub fn upgrade_effects(p: &mut Project) {
@@ -1328,6 +1331,10 @@ pub fn upgrade_effects(p: &mut Project) {
         for l in &c.layers {
             bounds.insert((*cid, l.id), effectcraft_render::effect_bounds(p, c, l));
         }
+    }
+    let unit_gamma = p.schema < effectcraft_project::SCHEMA_CINEON_GAMMA;
+    if unit_gamma {
+        cineon_gamma_instance_values_to_unit_scale(p);
     }
     let mut next = p.next_id;
     for (cid, it) in p.items.iter_mut() {
@@ -1347,6 +1354,10 @@ pub fn upgrade_effects(p: &mut Project) {
                 let effectcraft_project::Node::Group(g) = n else { continue };
                 let effectcraft_project::GroupKind::Effect { effect } = &g.kind else { continue };
                 if let Some(spec) = effectcraft_effects::find(effect) {
+                    // Before `upgrade_instance`, so a Gamma it adds keeps today's default.
+                    if unit_gamma {
+                        effectcraft_effects::migrate::cineon_gamma_to_unit_scale(spec.id, g);
+                    }
                     effectcraft_effects::migrate::upgrade_instance(spec, g, &mut effectcraft_project::build::Ids(&mut next), size);
                     if to_effect_space {
                         effectcraft_effects::migrate::to_effect_space(spec, g, size, d, &clone_d);
@@ -1357,6 +1368,77 @@ pub fn upgrade_effects(p: &mut Project) {
     }
     p.next_id = next;
     p.schema = effectcraft_project::SCHEMA_VERSION;
+}
+
+/// The Essential Properties values of precomp layers whose control exposes a Cineon Converter's
+/// Gamma, brought onto today's scale as the Gamma itself is
+/// ([`effectcraft_effects::migrate::scale_cineon_gamma`]), so an instance's overridden Gamma
+/// renders as before. A control that also drives a property other than a Cineon Converter's
+/// Gamma keeps its instance values, since one value cannot keep both renders. A control that
+/// exposes a nested precomp's Gamma control counts as a Gamma control too.
+fn cineon_gamma_instance_values_to_unit_scale(p: &mut Project) {
+    use effectcraft_project::essential;
+    type Controls = std::collections::HashSet<(ItemId, u64)>;
+    // A Cineon Converter's Gamma on `l`, or an Essential Properties value of `l` for a Gamma
+    // control of the comp it nests.
+    let is_gamma = |l: &Layer, uid: Uid, controls: &Controls| {
+        let direct = l.props.sub("effects").is_some_and(|fx| {
+            fx.groups().any(|g| {
+                matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect } if effect == "ec.utility.cineon")
+                    && g.get("gamma").is_some_and(|pr| pr.uid == uid)
+            })
+        });
+        let nested = || {
+            let effectcraft_project::LayerSource::Comp { item } = l.source else { return false };
+            let mut found = false;
+            if let Some(g) = essential::group(l) {
+                g.walk("", &mut |_, pr| {
+                    found |= pr.uid == uid && essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id)));
+                });
+            }
+            found
+        };
+        direct || nested()
+    };
+    let mut controls = Controls::new();
+    loop {
+        let mut added = vec![];
+        for (cid, c) in p.comps() {
+            let Some(eg) = &c.essential else { continue };
+            for ctl in eg.flat() {
+                if controls.contains(&(*cid, ctl.id)) {
+                    continue;
+                }
+                let targets = eg.resolve(ctl.id).map(|m| m.kind.targets()).unwrap_or_default();
+                if !targets.is_empty() && targets.iter().all(|(lid, uid)| c.layer(*lid).is_some_and(|l| is_gamma(l, *uid, &controls))) {
+                    added.push((*cid, ctl.id));
+                }
+            }
+        }
+        if added.is_empty() {
+            break;
+        }
+        controls.extend(added);
+    }
+    if controls.is_empty() {
+        return;
+    }
+    for it in p.items.values_mut() {
+        let effectcraft_project::ItemKind::Comp(c) = &mut it.kind else { continue };
+        let nests = |l: &Layer| matches!(l.source, effectcraft_project::LayerSource::Comp { item } if controls.iter().any(|(cid, _)| *cid == item));
+        if !c.layers.iter().any(nests) {
+            continue;
+        }
+        for l in &mut Arc::make_mut(c).layers {
+            let effectcraft_project::LayerSource::Comp { item } = l.source else { continue };
+            let Some(g) = l.props.sub_mut(essential::GROUP) else { continue };
+            g.walk_mut(&mut |pr| {
+                if essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id))) {
+                    effectcraft_effects::migrate::scale_cineon_gamma(pr);
+                }
+            });
+        }
+    }
 }
 
 #[cfg(test)]
