@@ -300,10 +300,10 @@ Issues #41–#47 (all from the Linux AppImage 0.1.1, 5 October): panning the vie
   ([plugins.md](plugins.md#extension-points-compared-with-after-effects) compares them). ScriptUI
   panels in the user's ScriptUI Panels folder are listed in the Window menu, dock like any panel
   and open again at the next launch. The scripts in the Startup folder run at launch, and the desktop
-  app runs the Shutdown folder's scripts as it quits. Missing: a global scope that scripts share
-  for the session (a Startup script's variables and functions are not available to later
-  scripts), keyboard
-  shortcuts for scripts and `.jsxbin`; `#include` / `#target` directives landed (#759,
+  app runs the Shutdown folder's scripts as it quits. Each File ▸ Scripts entry can be given a key
+  in Edit ▸ Keyboard Shortcuts. Missing: a global scope that scripts share for the session (a
+  Startup script's variables and functions are not available to later scripts) and `.jsxbin`;
+  `#include` / `#target` directives landed (#759,
   [scripting-parity.md](scripting-parity.md)).
 - Done so far: ease presets (#254) cover what ease-curve plug-ins are used for: easing curves kept
   by name and applied to pairs of keyframes. Modelled on a third-party panel, they are not core: a
