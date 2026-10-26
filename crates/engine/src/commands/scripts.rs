@@ -356,7 +356,20 @@ fn run_folder(s: &mut Session, dir: &str, quitting: bool) -> Value {
         let path = s.config.as_ref().and_then(|c| c.dir()).map(|d| d.join(dir).join(&name).to_string_lossy().into_owned()).unwrap_or_else(|| name.clone());
         // Windows open before this script runs belong to other scripts, perhaps of the same name.
         let before: Vec<u32> = s.script_ui.windows.iter().map(|w| w.id).collect();
+        let hosts_before = s.script_ui.task_hosts.clone();
         let mut r = super::file_more::run_js_file(s, &code, &path, &name);
+        if !quitting {
+            // The Startup script's context: the one that scheduled tasks or holds the windows it
+            // opened (a task scheduled after its dialog closes runs there too).
+            let tasks = s.script_ui.task_hosts.iter().filter(|h| !hosts_before.contains(h)).copied();
+            let windows = s.script_ui.windows.iter().filter(|w| !before.contains(&w.id)).map(|w| w.host);
+            let hosts: Vec<u32> = tasks.chain(windows).collect();
+            for h in hosts {
+                if !s.script_ui.startup_hosts.contains(&h) {
+                    s.script_ui.startup_hosts.push(h);
+                }
+            }
+        }
         let mut closed = 0;
         while quitting && closed < MAX_SHUTDOWN_DIALOGS && is_waiting(&r) {
             let Some(id) = s.script_ui.windows.iter().rev().find(|w| w.modal && w.script == path && !before.contains(&w.id)).map(|w| w.id) else { break };
