@@ -3892,6 +3892,7 @@ const SHAPE_ADD_ITEMS: &[(&str, &str)] = &[
     ("trim", "Trim Paths"),
     ("twist", "Twist"),
     ("wiggle", "Wiggle Paths"),
+    ("wiggler", "Wiggle Transform"),
     ("zigzag", "Zig Zag"),
 ];
 
