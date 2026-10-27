@@ -8,4 +8,5 @@ mod dispatch;
 mod edit;
 mod render;
 
+pub(crate) use edit::cineon_gamma_controls;
 pub use edit::upgrade_effects;

@@ -153,11 +153,16 @@ fn apply_preset(s: &mut Session, p: &Value) -> Result<Value> {
     let t = s.time();
     let mut applied = 0;
     let mut skipped = vec![];
+    let gamma_controls = unit_gamma.then(|| crate::session::cineon_gamma_controls(&s.project));
     s.edit("Apply Animation Preset", None, |proj, _| {
         let mut next = proj.next_id;
         for lid in &ids {
             let l = layer_mut(proj, cid, *lid)?;
             let lt = l.layer_time(t);
+            let exposed_gamma = match l.source {
+                LayerSource::Comp { item } => gamma_controls.as_ref().map(|controls| (item, controls)),
+                _ => None,
+            };
             if let Some(fx) = l.props.sub_mut("effects") {
                 for g in &effects {
                     let mut g = g.clone();
@@ -183,6 +188,13 @@ fn apply_preset(s: &mut Session, p: &Value) -> Result<Value> {
                             .collect();
                         if src.expr.is_some() {
                             pr.expr = src.expr.clone();
+                        }
+                        if resolved.starts_with("essential/")
+                            && exposed_gamma.is_some_and(|(item, controls)| {
+                                effectcraft_project::essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id)))
+                            })
+                        {
+                            effectcraft_effects::migrate::scale_cineon_gamma(pr);
                         }
                         applied += 1;
                     }
