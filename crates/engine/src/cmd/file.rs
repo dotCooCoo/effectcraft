@@ -1,5 +1,7 @@
 //! File menu.
 
+use std::collections::BTreeMap;
+
 use effectcraft_color::Label;
 use effectcraft_project::{FootageKind, ItemId, ItemKind, LayerSource, Project};
 use serde_json::{Value, json};
@@ -83,11 +85,39 @@ pub(crate) fn open(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"path": path, "savedBy": saved_by, "repaired": repaired}))
 }
 
+/// The longest side of a poster frame in a project file, the size of the poster in an exported
+/// template (`essential.exportTemplate`).
+const POSTER_MAX_SIDE: u32 = 320;
+
+/// Each composition's poster frame for the project file: a PNG of the comp at its `poster_time`,
+/// longest side at most [`POSTER_MAX_SIDE`], in base64. A comp that uses missing footage, or whose
+/// frame can't be encoded as PNG, is saved without one.
+fn posters(s: &Session) -> BTreeMap<ItemId, String> {
+    s.project
+        .comps()
+        .filter(|(id, _)| {
+            !effectcraft_project::essential::dependencies(&s.project, **id)
+                .iter()
+                .any(|d| matches!(s.project.item(*d).map(|i| &i.kind), Some(ItemKind::Footage(f)) if f.missing))
+        })
+        .filter_map(|(id, c)| {
+            let (w, h, rgba) = s.render_rgba8(*id, c.poster_time, POSTER_MAX_SIDE).ok()?;
+            let png = super::comp_more::encode_png(&rgba, w, h).ok()?;
+            Some((*id, effectcraft_track::roto::rle::base64_encode(&png)))
+        })
+        .collect()
+}
+
+/// The project file's JSON: the project, the open compositions and each comp's poster frame.
+pub(crate) fn file_json(s: &Session) -> Result<String> {
+    Ok(s.project.to_file_json_with_posters(&s.saved_view(), &posters(s))?)
+}
+
 /// The project file's text for `path`: `.ecproj` JSON, or XML for `.ecprojx` / `.xml` (a
 /// project opened from an XML copy saves as XML again). Fails, writing nothing, when the project
 /// wouldn't read back.
 pub(crate) fn file_text(s: &Session, path: &str) -> Result<String> {
-    let json = s.project.to_file_json_with_view(&s.saved_view())?;
+    let json = file_json(s)?;
     if crate::xml_project::is_xml_path(path) { crate::xml_project::to_xml(&json).map_err(EngineError::Other) } else { Ok(json) }
 }
 

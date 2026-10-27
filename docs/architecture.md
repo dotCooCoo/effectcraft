@@ -100,7 +100,10 @@ dropped if it saves the project. Save, Save As, Save a Copy and Increment and Sa
 file's format (`.ecprojx` stays XML). Next to `savedBy` the file records the active comp and the
 open comp tabs (`activeComp`, `openComps`), which opening restores; they are editor state, not
 part of `Project`, so older files (and ids that no longer name a comp) open on the first comp and
-older versions ignore them.
+older versions ignore them. After the project, the file stores each comp's poster frame
+(`posters`: the comp's item id to a base64 PNG of the comp at its poster time, longest side at
+most 320 pixels), so other apps can show the project without rendering it. A comp that uses
+missing footage is saved without one, and opening a project ignores them.
 
 `schema` changes when a saved value changes meaning; a project from an older schema is converted
 when it is opened (`effectcraft_engine::upgrade_effects`, which also refreshes effect instances

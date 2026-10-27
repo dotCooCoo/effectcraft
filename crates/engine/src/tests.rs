@@ -31,6 +31,7 @@ mod motion_blur_depth;
 mod paint;
 mod panels;
 mod project_items;
+mod project_posters;
 mod proxy;
 mod quick_offset;
 mod replace_source;

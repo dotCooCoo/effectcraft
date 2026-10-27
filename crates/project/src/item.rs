@@ -256,6 +256,13 @@ impl Project {
     }
     /// [`Project::to_file_json`] that also records the open compositions ([`SavedView`]).
     pub fn to_file_json_with_view(&self, view: &SavedView) -> Result<String, ProjectError> {
+        self.to_file_json_with_posters(view, &BTreeMap::new())
+    }
+    /// [`Project::to_file_json_with_view`] that also stores a poster frame per composition:
+    /// `posters`, written after the project, maps a comp's item id to a base64 PNG (RFC 4648 §4)
+    /// of the comp at its `poster_time`, so other apps can show the project without rendering it.
+    /// Reading a project ignores it, as versions without it do.
+    pub fn to_file_json_with_posters(&self, view: &SavedView, posters: &BTreeMap<ItemId, String>) -> Result<String, ProjectError> {
         if self.schema > SCHEMA_VERSION {
             return Err(ProjectError::Invalid(format!(
                 "the project can't be saved: it holds a value a project file can't store (project schema {} is newer than this version supports ({SCHEMA_VERSION}))",
@@ -270,8 +277,10 @@ impl Project {
             view: &'a SavedView,
             #[serde(flatten)]
             project: &'a Project,
+            #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+            posters: &'a BTreeMap<ItemId, String>,
         }
-        let file = File { saved_by: APP_VERSION, view, project: self };
+        let file = File { saved_by: APP_VERSION, view, project: self, posters };
         file_check::check(&file)
             .map_err(|e| ProjectError::Invalid(format!("the project can't be saved: it holds a value a project file can't store ({e})")))?;
         let text = serde_json::to_string_pretty(&file).map_err(|e| ProjectError::Invalid(format!("the project can't be saved: {e}")))?;
