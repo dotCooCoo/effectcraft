@@ -313,13 +313,7 @@ pub fn upgrade_effects(p: &mut Project) {
     p.schema = effectcraft_project::SCHEMA_VERSION;
 }
 
-/// The Essential Properties values of precomp layers whose control exposes a Cineon Converter's
-/// Gamma, brought onto today's scale as the Gamma itself is
-/// ([`effectcraft_effects::migrate::scale_cineon_gamma`]), so an instance's overridden Gamma
-/// renders as before. A control that also drives a property other than a Cineon Converter's
-/// Gamma keeps its instance values, since one value cannot keep both renders. A control that
-/// exposes a nested precomp's Gamma control counts as a Gamma control too.
-fn cineon_gamma_instance_values_to_unit_scale(p: &mut Project) {
+pub(crate) fn cineon_gamma_controls(p: &Project) -> std::collections::HashSet<(ItemId, u64)> {
     use effectcraft_project::essential;
     type Controls = std::collections::HashSet<(ItemId, u64)>;
     // A Cineon Converter's Gamma on `l`, or an Essential Properties value of `l` for a Gamma
@@ -363,6 +357,12 @@ fn cineon_gamma_instance_values_to_unit_scale(p: &mut Project) {
         }
         controls.extend(added);
     }
+    controls
+}
+
+fn cineon_gamma_instance_values_to_unit_scale(p: &mut Project) {
+    use effectcraft_project::essential;
+    let controls = cineon_gamma_controls(p);
     if controls.is_empty() {
         return;
     }

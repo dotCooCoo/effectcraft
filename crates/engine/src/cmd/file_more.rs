@@ -450,9 +450,6 @@ fn run_script(s: &mut Session, p: &Value) -> Result<Value> {
         && p.get("steps").is_none()
     {
         let name = name.to_string();
-        if super::scripts::scripts(s).iter().any(|e| e.name == name && !e.panel) {
-            remember_script(s, crate::prefs::RecentScript::Name(name.clone()));
-        }
         return super::scripts::run_named(s, &name);
     }
     if let Some(path) = str_p(p, "path")
@@ -464,18 +461,19 @@ fn run_script(s: &mut Session, p: &Value) -> Result<Value> {
         }
         let bytes = s.services.read_file(path).map_err(|e| EngineError::Other(format!("cannot read {path}: {e}")))?;
         let full = s.services.full_path(path);
-        remember_script(s, crate::prefs::RecentScript::Path(full));
         let code = String::from_utf8_lossy(&bytes).to_string();
         let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
         let out = run_js(s, &code, path, false)?;
-        return report_js(s, &name, out);
+        let result = report_js(s, &name, out)?;
+        remember_script(s, crate::prefs::RecentScript::Path(full));
+        return Ok(result);
     }
+    let mut script_path = None;
     let steps: Vec<Value> = match (p.get("steps"), str_p(p, "path")) {
         (Some(Value::Array(a)), _) => a.clone(),
         (_, Some(path)) => {
             let bytes = s.services.read_file(path).map_err(|e| EngineError::Other(format!("cannot read {path}: {e}")))?;
-            let full = s.services.full_path(path);
-            remember_script(s, crate::prefs::RecentScript::Path(full));
+            script_path = Some(s.services.full_path(path));
             let text = String::from_utf8_lossy(&bytes).to_string();
             match serde_json::from_str::<Value>(&text) {
                 Ok(Value::Array(a)) => a,
@@ -508,11 +506,14 @@ fn run_script(s: &mut Session, p: &Value) -> Result<Value> {
         let r = r.map_err(|e| EngineError::Other(format!("step {} ({id}): {e}", i + 1)))?;
         results.push(r);
     }
+    if let Some(path) = script_path {
+        remember_script(s, crate::prefs::RecentScript::Path(path));
+    }
     Ok(json!({"steps": results.len(), "results": results}))
 }
 
 /// Remember a script that runs for File ▸ Scripts ▸ Recent Script Files.
-fn remember_script(s: &mut Session, script: crate::prefs::RecentScript) {
+pub(super) fn remember_script(s: &mut Session, script: crate::prefs::RecentScript) {
     s.prefs.push_recent_script(script);
     s.save_prefs();
     s.prefs_revision += 1;

@@ -909,6 +909,51 @@ fn version_1_presets_convert_cineon_converter_gamma() {
     assert!((gamma(&s, 0) - 2.2 / 1.7).abs() < 1e-9, "a version 1 Gamma property is converted");
 }
 
+#[test]
+fn presets_convert_exposed_cineon_gamma_for_direct_and_nested_controls() {
+    for nested in [false, true] {
+        for mixed in [false, true] {
+            let mut s = Session::default();
+            s.execute("comp.new", json!({"name": "Inner", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+            let mut source = s.active_comp_id().unwrap();
+            let solid = s.execute("layer.newSolid", json!({"width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+            apply(&mut s, solid, "Cineon Converter");
+            let mut control = s.execute("essential.addProperty", json!({"layer": solid, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+            if mixed {
+                s.execute("essential.linkProperty", json!({"control": control, "layer": solid, "path": "transform/opacity"})).unwrap();
+            }
+            if nested {
+                s.execute("comp.new", json!({"name": "Middle", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+                let middle = s.active_comp_id().unwrap();
+                let instance = s.execute("layer.addItem", json!({"item": source.0})).unwrap()["layer"].as_u64().unwrap();
+                let path = format!("essential/{}", effectcraft_project::essential::match_id(control));
+                control = s.execute("essential.addProperty", json!({"layer": instance, "path": path})).unwrap()["controls"][0].as_u64().unwrap();
+                source = middle;
+            }
+            s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+            let instance = s.execute("layer.addItem", json!({"item": source.0})).unwrap()["layer"].as_u64().unwrap();
+            let path = format!("essential/{}", effectcraft_project::essential::match_id(control));
+            s.execute("essential.set", json!({"layer": instance, "control": control, "value": 2.2})).unwrap();
+            s.execute("prop.select", json!({"layer": instance, "path": path})).unwrap();
+            let file = std::env::temp_dir().join(format!("ec-cineon-exposed-preset-{}-{nested}-{mixed}.ecpreset", std::process::id()));
+            s.execute("anim.savePreset", json!({"path": file})).unwrap();
+            let preset: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+            std::fs::remove_file(file).unwrap();
+            assert_eq!(preset["properties"][0]["path"], path);
+            for version in [2, 1] {
+                let mut preset = preset.clone();
+                preset["effectcraftAnimationPreset"] = json!(version);
+                s.execute("essential.set", json!({"layer": instance, "control": control, "value": 0.5})).unwrap();
+                let result = s.execute("anim.applyPreset", json!({"preset": preset, "layers": [instance]})).unwrap();
+                assert_eq!(result["skipped"], json!([]));
+                let value = s.execute("prop.get", json!({"layer": instance, "path": path})).unwrap()["value"].as_f64().unwrap();
+                let expected = if version == 1 && !mixed { 2.2 / 1.7 } else { 2.2 };
+                assert!((value - expected).abs() < 1e-9, "nested={nested}, mixed={mixed}, version={version}: {value} != {expected}");
+            }
+        }
+    }
+}
+
 /// #410: `effect.warning` reports what an OCIO effect can't render as asked (Effect Controls
 /// shows it under the effect's name): a transform of its custom config that passes colours
 /// through, a colour space the config lacks or a config it can't read; nothing for the

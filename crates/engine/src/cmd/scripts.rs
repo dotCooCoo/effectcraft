@@ -258,7 +258,9 @@ pub(crate) fn run_named(s: &mut Session, name: &str) -> Result<Value> {
     if panel {
         return open_panel(s, &json!({"name": name}));
     }
-    super::file_more::run_js_named(s, &code, name)
+    let result = super::file_more::run_js_named(s, &code, name)?;
+    super::file_more::remember_script(s, crate::prefs::RecentScript::Name(name.to_string()));
+    Ok(result)
 }
 
 /// The code a ScriptUI panel runs with: `this` is a dockable Panel titled after the script.
@@ -715,6 +717,42 @@ mod tests {
         let saved = std::fs::read_to_string(root.join("settings").join(PREFS_FILE)).unwrap();
         assert_eq!(Prefs::from_json(&saved).recent_scripts, s.prefs.recent_scripts);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recent_script_history_uses_the_selected_script() {
+        let (mut s, root) = session_in_tmp("recent-panel-collision");
+        let name = "Rename Layers.jsx";
+        std::fs::write(root.join("settings").join(PANELS_DIR).join(name), "panel").unwrap();
+        assert!(super::scripts(&s).iter().any(|entry| entry.name == name && !entry.panel));
+        assert!(script_code(&s, name, None).unwrap().0);
+        s.execute("file.runScript", json!({"name": name})).unwrap();
+        assert!(s.prefs.recent_scripts.is_empty(), "the selected panel must not enter recent script history");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn recent_script_history_keeps_successful_entries_when_scripts_fail() {
+        fn fail_or_echo(_: &mut Session, request: &ScriptRequest) -> Value {
+            if request.code == "fail" { json!({"error": {"message": "script failed"}}) } else { json!({"ran": request.code}) }
+        }
+        let (mut s, root) = session_in_tmp("recent-failed");
+        s.script = Some(fail_or_echo);
+        let good = root.join("good.jsonl");
+        std::fs::write(&good, "[]").unwrap();
+        s.execute("file.runScript", json!({"path": good})).unwrap();
+        let remembered = s.prefs.recent_scripts.clone();
+        for (name, code) in [("parse.jsonl", "{"), ("step.jsonl", r#"{"command":"does.not.exist"}"#), ("missing-command.jsonl", "{}"), ("runtime.jsx", "fail")]
+        {
+            let path = root.join(name);
+            std::fs::write(&path, code).unwrap();
+            assert!(s.execute("file.runScript", json!({"path": path})).is_err(), "{name}");
+            assert_eq!(s.prefs.recent_scripts, remembered, "{name}");
+        }
+        std::fs::write(root.join("settings").join(SCRIPTS_DIR).join("Failed.jsx"), "fail").unwrap();
+        assert!(s.execute("file.runScript", json!({"name": "Failed.jsx"})).is_err());
+        assert_eq!(s.prefs.recent_scripts, remembered);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     /// Reads relative paths from a working directory that a test can change.
