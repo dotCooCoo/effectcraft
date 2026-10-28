@@ -263,7 +263,8 @@ impl Session {
 /// [`effectcraft_effects::migrate`]), Cineon Converter's Gamma and the Essential Properties
 /// values that expose it in a project from before
 /// [`effectcraft_project::SCHEMA_CINEON_GAMMA`] onto today's scale
-/// ([`effectcraft_effects::migrate::cineon_gamma_to_unit_scale`]), and a project from before
+/// ([`effectcraft_effects::migrate::cineon_gamma_to_unit_scale`], with other expressions reading
+/// Gamma as it was saved), and a project from before
 /// [`effectcraft_project::SCHEMA_EFFECT_SPACE`] into effect space
 /// ([`effectcraft_effects::migrate::to_effect_space`]). Stamps the current schema.
 pub fn upgrade_effects(p: &mut Project) {
@@ -280,6 +281,7 @@ pub fn upgrade_effects(p: &mut Project) {
         cineon_gamma_instance_values_to_unit_scale(p);
     }
     let mut next = p.next_id;
+    let mut has_cineon = false;
     for (cid, it) in p.items.iter_mut() {
         let effectcraft_project::ItemKind::Comp(c) = &mut it.kind else { continue };
         for l in &mut std::sync::Arc::make_mut(c).layers {
@@ -300,12 +302,21 @@ pub fn upgrade_effects(p: &mut Project) {
                     // Before `upgrade_instance`, so a Gamma it adds keeps today's default.
                     if unit_gamma {
                         effectcraft_effects::migrate::cineon_gamma_to_unit_scale(spec.id, g);
+                        has_cineon |= spec.id == "ec.utility.cineon";
                     }
                     effectcraft_effects::migrate::upgrade_instance(spec, g, &mut effectcraft_project::build::Ids(&mut next), size);
                     if to_effect_space {
                         effectcraft_effects::migrate::to_effect_space(spec, g, size, d, &clone_d);
                     }
                 }
+            }
+        }
+    }
+    if has_cineon {
+        for it in p.items.values_mut() {
+            let effectcraft_project::ItemKind::Comp(c) = &mut it.kind else { continue };
+            for l in &mut std::sync::Arc::make_mut(c).layers {
+                l.props.walk_mut(&mut |pr| effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(pr));
             }
         }
     }

@@ -502,6 +502,20 @@ pub fn scale_cineon_gamma(pr: &mut Property) {
     }
 }
 
+/// For an expression on any other property of a project whose Cineon Converter Gammas
+/// [`scale_cineon_gamma`] converted: the expression reads those Gammas on the old scale.
+/// Expressions already converted are left as they are.
+pub fn read_cineon_gamma_on_old_scale(pr: &mut Property) {
+    if pr.has_expression()
+        && let Some(expr) = pr.expr.as_mut()
+        && !expr.text.starts_with("__readScaled(")
+        && !expr.text.starts_with("__readLegacyGamma(")
+    {
+        let quoted = serde_json::Value::String(std::mem::take(&mut expr.text)).to_string();
+        expr.text = format!("__readLegacyGamma({CINEON_LINEAR_GAMMA_BEFORE_SCHEMA_3});\neval(__rewrite({quoted}))");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

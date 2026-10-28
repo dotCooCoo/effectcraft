@@ -536,6 +536,11 @@ fn cineon_gamma_migration_keeps_reads_of_another_gamma() {
     }
     let read = f.ev(f.a, ROT, "thisComp.layer('B').effect('C2')('Gamma')", 0.0);
     assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 1.0).abs() < 1e-9), "{read:?}");
+    // An expression on another property reads Gamma as it was saved.
+    f.set_expr(f.a, ROT, "thisComp.layer('B').effect('C1')('Gamma') * 100");
+    effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(f.layer_mut(f.a).props.prop_mut(ROT).unwrap());
+    let read = f.ev(f.b, ROT, "thisComp.layer('A').transform.rotation", 0.0);
+    assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 170.0).abs() < 1e-9), "{read:?}");
 }
 
 #[test]
