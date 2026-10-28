@@ -124,6 +124,7 @@ fn apply_preset(s: &mut Session, p: &Value) -> Result<Value> {
                 let effect = effect.clone();
                 effectcraft_effects::migrate::cineon_gamma_to_unit_scale(&effect, g);
             }
+            g.walk_mut(&mut |pr| effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(pr));
         }
     }
     let mut props: Vec<(String, Property)> = doc["properties"]
@@ -147,6 +148,8 @@ fn apply_preset(s: &mut Session, p: &Value) -> Result<Value> {
         for (path, pr) in &mut props {
             if is_cineon_gamma_path(path) {
                 effectcraft_effects::migrate::scale_cineon_gamma(pr);
+            } else {
+                effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(pr);
             }
         }
     }
