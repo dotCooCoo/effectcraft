@@ -910,6 +910,28 @@ fn version_1_presets_convert_cineon_converter_gamma() {
 }
 
 #[test]
+fn version_1_presets_read_cineon_gamma_in_other_expressions_as_saved() {
+    let (mut s, a, _) = comp_with_two_solids();
+    apply(&mut s, a, "Cineon Converter");
+    let text = "effect('Cineon Converter')('Gamma') * 100";
+    s.execute("prop.setExpression", json!({"layer": a, "path": "transform/rotation", "expression": text})).unwrap();
+    s.execute("prop.select", json!({"layer": a, "path": "transform/rotation"})).unwrap();
+    let file = std::env::temp_dir().join(format!("ec-cineon-reader-{}.ecpreset", std::process::id()));
+    s.execute("anim.savePreset", json!({"path": file})).unwrap();
+    let preset: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    std::fs::remove_file(file).unwrap();
+    let expression = |s: &Session| layer(s, a).props.prop("transform/rotation").and_then(|p| p.expr.clone()).map(|e| e.text).unwrap_or_default();
+    for version in [2, 1] {
+        let mut preset = preset.clone();
+        preset["effectcraftAnimationPreset"] = json!(version);
+        s.execute("anim.applyPreset", json!({"preset": preset, "layers": [a]})).unwrap();
+        let applied = expression(&s);
+        assert_eq!(applied == text, version == 2, "version {version}: {applied}");
+        assert!(applied.contains("Gamma"), "{applied}");
+    }
+}
+
+#[test]
 fn presets_convert_exposed_cineon_gamma_for_direct_and_nested_controls() {
     for nested in [false, true] {
         for mixed in [false, true] {
