@@ -176,6 +176,20 @@ fn apply_preset(s: &mut Session, p: &Value) -> Result<Value> {
                 let resolved = resolve_effect_path(l, path);
                 match l.props.prop_mut(&resolved) {
                     Some(pr) if std::mem::discriminant(&pr.value) == std::mem::discriminant(&src.value) => {
+                        // Only the preset's data is converted; an expression kept on the
+                        // destination is left as it is.
+                        let converted;
+                        let src = if resolved.starts_with("essential/")
+                            && exposed_gamma.is_some_and(|(item, controls)| {
+                                effectcraft_project::essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id)))
+                            }) {
+                            let mut c = src.clone();
+                            effectcraft_effects::migrate::scale_cineon_gamma(&mut c);
+                            converted = c;
+                            &converted
+                        } else {
+                            src
+                        };
                         pr.value = src.value.clone();
                         pr.keys = src
                             .keys
@@ -188,13 +202,6 @@ fn apply_preset(s: &mut Session, p: &Value) -> Result<Value> {
                             .collect();
                         if src.expr.is_some() {
                             pr.expr = src.expr.clone();
-                        }
-                        if resolved.starts_with("essential/")
-                            && exposed_gamma.is_some_and(|(item, controls)| {
-                                effectcraft_project::essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id)))
-                            })
-                        {
-                            effectcraft_effects::migrate::scale_cineon_gamma(pr);
                         }
                         applied += 1;
                     }

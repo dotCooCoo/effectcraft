@@ -954,6 +954,30 @@ fn presets_convert_exposed_cineon_gamma_for_direct_and_nested_controls() {
     }
 }
 
+#[test]
+fn version_1_presets_leave_an_exposed_gamma_expression_they_do_not_set() {
+    let mut s = Session::default();
+    s.execute("comp.new", json!({"name": "Inner", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let source = s.active_comp_id().unwrap();
+    let solid = s.execute("layer.newSolid", json!({"width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+    apply(&mut s, solid, "Cineon Converter");
+    let control = s.execute("essential.addProperty", json!({"layer": solid, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let instance = s.execute("layer.addItem", json!({"item": source.0})).unwrap()["layer"].as_u64().unwrap();
+    let path = format!("essential/{}", effectcraft_project::essential::match_id(control));
+    s.execute("essential.set", json!({"layer": instance, "control": control, "value": 2.2})).unwrap();
+    s.execute("prop.select", json!({"layer": instance, "path": path})).unwrap();
+    let file = std::env::temp_dir().join(format!("ec-cineon-kept-expression-{}.ecpreset", std::process::id()));
+    s.execute("anim.savePreset", json!({"path": file})).unwrap();
+    let mut preset: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    std::fs::remove_file(file).unwrap();
+    preset["effectcraftAnimationPreset"] = json!(1);
+    s.execute("prop.setExpression", json!({"layer": instance, "path": path, "expression": "1"})).unwrap();
+    s.execute("anim.applyPreset", json!({"preset": preset, "layers": [instance]})).unwrap();
+    let kept = layer(&s, instance).props.prop(&path).and_then(|p| p.expr.clone()).map(|e| e.text);
+    assert_eq!(kept.as_deref(), Some("1"));
+}
+
 /// #410: `effect.warning` reports what an OCIO effect can't render as asked (Effect Controls
 /// shows it under the effect's name): a transform of its custom config that passes colours
 /// through, a colour space the config lacks or a config it can't read; nothing for the
