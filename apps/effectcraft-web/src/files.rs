@@ -152,8 +152,8 @@ impl Services for WebServices {
         false
     }
     /// The table's keys are the paths themselves.
-    fn full_path(&self, path: &str) -> String {
-        path.to_string()
+    fn full_path(&self, path: &str) -> Option<String> {
+        Some(path.to_string())
     }
 }
 

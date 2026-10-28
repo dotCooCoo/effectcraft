@@ -465,7 +465,9 @@ fn run_script(s: &mut Session, p: &Value) -> Result<Value> {
         let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
         let out = run_js(s, &code, path, false)?;
         let result = report_js(s, &name, out)?;
-        remember_script(s, crate::prefs::RecentScript::Path(full));
+        if let Some(full) = full {
+            remember_script(s, crate::prefs::RecentScript::Path(full));
+        }
         return Ok(result);
     }
     let mut script_path = None;
@@ -473,7 +475,7 @@ fn run_script(s: &mut Session, p: &Value) -> Result<Value> {
         (Some(Value::Array(a)), _) => a.clone(),
         (_, Some(path)) => {
             let bytes = s.services.read_file(path).map_err(|e| EngineError::Other(format!("cannot read {path}: {e}")))?;
-            script_path = Some(s.services.full_path(path));
+            script_path = s.services.full_path(path);
             let text = String::from_utf8_lossy(&bytes).to_string();
             match serde_json::from_str::<Value>(&text) {
                 Ok(Value::Array(a)) => a,

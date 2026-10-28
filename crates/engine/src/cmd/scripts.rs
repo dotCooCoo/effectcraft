@@ -775,9 +775,38 @@ mod tests {
         fn write_file(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
             std::fs::write(self.at(path), data)
         }
-        fn full_path(&self, path: &str) -> String {
-            self.at(path).to_string_lossy().into_owned()
+        fn full_path(&self, path: &str) -> Option<String> {
+            Some(self.at(path).to_string_lossy().into_owned())
         }
+    }
+
+    /// Reads from a folder but can't make paths absolute.
+    struct NoFullPath(PathBuf);
+
+    impl crate::Services for NoFullPath {
+        fn read_file(&self, path: &str) -> std::io::Result<Vec<u8>> {
+            std::fs::read(self.0.join(path))
+        }
+        fn write_file(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
+            std::fs::write(self.0.join(path), data)
+        }
+        fn full_path(&self, _path: &str) -> Option<String> {
+            None
+        }
+    }
+
+    /// A script whose path can't be made absolute still runs, and Recent Script Files does not
+    /// keep its relative path.
+    #[test]
+    fn unresolved_script_paths_are_not_remembered() {
+        let (mut s, root) = session_in_tmp("recent-unresolved");
+        std::fs::write(root.join("Tool.jsx"), "a").unwrap();
+        std::fs::write(root.join("steps.jsonl"), "[]").unwrap();
+        s.services = Arc::new(NoFullPath(root.clone()));
+        assert_eq!(s.execute("file.runScript", json!({"path": "Tool.jsx"})).unwrap()["ran"], "a");
+        s.execute("file.runScript", json!({"path": "steps.jsonl"})).unwrap();
+        assert!(s.prefs.recent_scripts.is_empty(), "{:?}", s.prefs.recent_scripts);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// A script run from a relative path runs the same file again from Recent Script Files after
@@ -808,7 +837,7 @@ mod tests {
     #[test]
     fn native_full_paths_are_absolute() {
         use crate::Services;
-        assert!(std::path::Path::new(&crate::FsServices.full_path("Tool.jsx")).is_absolute());
+        assert!(crate::FsServices.full_path("Tool.jsx").is_some_and(|p| std::path::Path::new(&p).is_absolute()));
     }
 
     #[test]

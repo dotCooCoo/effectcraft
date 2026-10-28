@@ -39,9 +39,10 @@ pub trait Services: Send + Sync {
     }
     /// `path` as a list of recent files keeps it (File ▸ Scripts ▸ Recent Script Files): a
     /// relative path is made absolute against the working directory, so it opens the same file
-    /// after the working directory changes.
-    fn full_path(&self, path: &str) -> String {
-        std::path::absolute(path).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| path.to_string())
+    /// after the working directory changes. `None` when the path can't be made absolute (the
+    /// working directory can't be read); the script is then not added to the list.
+    fn full_path(&self, path: &str) -> Option<String> {
+        std::path::absolute(path).ok().map(|p| p.to_string_lossy().into_owned())
     }
 }
 
