@@ -1,4 +1,4 @@
-use super::Prefs;
+use super::{Deserialize, Prefs, Serialize};
 
 impl Prefs {
     /// Remember a project in File ▸ Open Recent.

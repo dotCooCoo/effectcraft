@@ -1,6 +1,6 @@
 use super::accel::{Accelerator, Backend, CpuFx, FxStep, FxTarget};
 use super::footage::{FootageSource, is_vector_footage};
-use super::frames::{blend_frames, content_bounds, field_frame, frame_blend_mode, frame_position, frame_size, interpret_pixels, roi_inside};
+use super::frames::{blend_frames, cineon_frame, content_bounds, field_frame, frame_blend_mode, frame_position, frame_size, interpret_pixels, roi_inside};
 use super::fx_host::{FxHost, essential_overrides};
 use super::opts::{Collapse3d, LayerTiming, MAX_THROUGH, RenderOpts, Through};
 use super::{
