@@ -252,9 +252,11 @@ fn uninstall(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 /// Run an installed or bundled script by name (File ▸ Scripts ▸ `<name>`). A ScriptUI panel run
-/// this way gets `this` = a floating palette-like panel window.
+/// this way gets `this` = a floating palette-like panel window. A script listed under File ▸
+/// Scripts runs before a panel of the same name.
 pub(crate) fn run_named(s: &mut Session, name: &str) -> Result<Value> {
-    let (panel, code) = script_code(s, name, None).ok_or_else(|| bad("file.runScript", format!("no installed or bundled script `{name}`")))?;
+    let found = script_code(s, name, Some(false)).or_else(|| script_code(s, name, None));
+    let (panel, code) = found.ok_or_else(|| bad("file.runScript", format!("no installed or bundled script `{name}`")))?;
     if panel {
         return open_panel(s, &json!({"name": name}));
     }
@@ -726,8 +728,10 @@ mod tests {
         std::fs::write(root.join("settings").join(PANELS_DIR).join(name), "panel").unwrap();
         assert!(super::scripts(&s).iter().any(|entry| entry.name == name && !entry.panel));
         assert!(script_code(&s, name, None).unwrap().0);
-        s.execute("file.runScript", json!({"name": name})).unwrap();
-        assert!(s.prefs.recent_scripts.is_empty(), "the selected panel must not enter recent script history");
+        let sample = BUNDLED.iter().find(|b| b.0 == name).unwrap().3;
+        assert_eq!(s.execute("file.runScript", json!({"name": name})).unwrap()["ran"], sample);
+        assert!(super::open_panel_names(&s).is_empty(), "the listed script runs instead of the panel");
+        assert_eq!(s.prefs.recent_scripts, [crate::prefs::RecentScript::Name(name.to_string())]);
         let _ = std::fs::remove_dir_all(root);
     }
 

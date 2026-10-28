@@ -15,6 +15,8 @@ var __timeless = false;
 var textIndex = 1;
 var textTotal = 1;
 var selectorValue = [100, 100, 100];
+// The factor that the property's own numeric values are read with (see `__readScaled`).
+var __selfScale = 1;
 
 // Request ops (must match runtime.rs).
 var __COMP = 0, __COMPNAME = 1, __LAYER = 2, __LINFO = 3, __CHILD = 4, __PINFO = 5, __VALUE = 6, __XFORM = 7, __RECT = 8, __MARKERS = 9, __DOC = 10;
@@ -31,6 +33,30 @@ function __begin(t, v, c, l, path, uid, idx, fd, ti, tt, sv) {
   __seed = 0;
   __timeless = false;
   __projectInfo = null;
+  __selfScale = 1;
+}
+
+// A migrated Cineon Converter Gamma expression: Gamma values were divided by `f`, so its own
+// `value`, `valueAtTime` and keyframe values, and those of every other Cineon Converter Gamma,
+// read multiplied by `f`, as they were saved.
+function __readScaled(f) {
+  __selfScale = f;
+  value = __selfScaled(value);
+}
+
+function __selfScaled(v) {
+  return typeof v === 'number' && __selfScale !== 1 ? v * __selfScale : v;
+}
+
+function __scaledRead(p, v) {
+  if (__selfScale === 1) return v;
+  if (p.__self) return __selfScaled(v);
+  try {
+    if (p.matchName === 'gamma' && p.propertyGroup(1).matchName === 'ec.utility.cineon') return __selfScaled(v);
+  } catch (e) {
+    return v;
+  }
+  return v;
 }
 
 function __finish(r) {
@@ -755,7 +781,8 @@ Prop.prototype = {
   valueAtTime: function (t) {
     t = __v(t);
     if (this.__self && t === time) return value;
-    return this.__wrap(__h(__VALUE, this.__c, this.__l, this.__p, t, this.__self));
+    var v = this.__wrap(__h(__VALUE, this.__c, this.__l, this.__p, t, this.__self));
+    return __scaledRead(this, v);
   },
   velocityAtTime: function (t) {
     var h = 1e-3;
@@ -768,7 +795,8 @@ Prop.prototype = {
     var info = this.__info, N = info[4].length;
     if (!(n >= 1 && n <= N)) __err('Key index ' + n + ' out of range (property has ' + N + ' keys)');
     n = Math.floor(n);
-    return { time: info[4][n - 1], value: this.__wrap(info[5][n - 1]), index: n };
+    var v = this.__wrap(info[5][n - 1]);
+    return { time: info[4][n - 1], value: __scaledRead(this, v), index: n };
   },
   nearestKey: function (t) {
     var times = this.__info[4];

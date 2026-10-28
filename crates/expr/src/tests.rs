@@ -501,6 +501,44 @@ fn effect_slider_with_expression_drives_another_layer() {
 }
 
 #[test]
+fn cineon_gamma_migration_keeps_expression_results() {
+    // The slider is keyed 42 at 0 s and 84 at 2 s, and read at 1 s (63).
+    for text in [
+        "1.7",
+        "var g = value / 63;\ng * 1.7",
+        "thisProperty.valueAtTime(0) / 42 * 1.7",
+        "key(2).value / 84 * 1.7",
+        "let value = 1.7; value",
+        "([0.85, 0] * 2)[0]",
+    ] {
+        let mut f = fx();
+        f.set_expr(f.a, "effects/#1/slider", text);
+        let pr = f.layer_mut(f.a).props.prop_mut("effects/#1/slider").unwrap();
+        pr.keys = vec![Keyframe::new(Tick::ZERO, Value::Scalar(42.0)), Keyframe::new(secs(2.0), Value::Scalar(84.0))];
+        effectcraft_effects::migrate::scale_cineon_gamma(pr);
+        assert_eq!(pr.keys[0].value, Value::Scalar(42.0 / 1.7), "{text}");
+        let read = f.ev(f.b, ROT, "thisComp.layer('A').effect('Slider Control')('Slider')", 1.0);
+        assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 1.0).abs() < 1e-9), "{text}: {read:?}");
+    }
+}
+
+#[test]
+fn cineon_gamma_migration_keeps_reads_of_another_gamma() {
+    let mut f = fx();
+    let spec = effectcraft_effects::find("ec.utility.cineon").unwrap();
+    for (name, value, expr) in [("C1", 1.7, None), ("C2", 1.0, Some("effect('C1')('Gamma')"))] {
+        let mut g = group_push(&mut f.p, |ids| effectcraft_effects::instantiate(spec, ids, name, [20.0, 20.0]));
+        let gamma = g.get_mut("gamma").unwrap();
+        gamma.value = Value::Scalar(value);
+        gamma.expr = expr.map(|text| Expression { text: text.into(), enabled: true });
+        effectcraft_effects::migrate::cineon_gamma_to_unit_scale(spec.id, &mut g);
+        f.layer_mut(f.b).props.sub_mut("effects").unwrap().children.push(g.into());
+    }
+    let read = f.ev(f.a, ROT, "thisComp.layer('B').effect('C2')('Gamma')", 0.0);
+    assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 1.0).abs() < 1e-9), "{read:?}");
+}
+
+#[test]
 fn missing_effect_is_an_error() {
     let f = fx();
     let e = f.err("effect('Nope')('Slider')");
