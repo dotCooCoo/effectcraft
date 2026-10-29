@@ -902,6 +902,36 @@ fn a_project_saved_now_opens_in_an_older_build_as_documented() {
     }
 }
 
+/// Reset on a version 1 Cineon Converter keeps its Version, so its other Gamma keyframes render
+/// as before, and keys Gamma to version 1's linear Gamma (1.7) at the current time.
+#[test]
+fn resetting_an_old_cineon_converter_keeps_its_version() {
+    let mut s = Session::default();
+    s.execute("file.projectSettings", json!({"bitDepth": 32})).unwrap();
+    s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+    let cid = s.active_comp_id().unwrap();
+    let l = s.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+    let input = s.render(cid, Tick::ZERO, Default::default()).get(4, 4);
+    let fx = apply(&mut s, l, "Cineon Converter");
+    s.execute("prop.set", json!({"layer": l, "path": "effects/#1/highlightRolloff", "value": 0.0})).unwrap();
+    animate_effect(&mut s, l, fx, "gamma", &[(0.0, 2.2), (1.0, 3.4)]);
+    let (dir, path) = save_before_cineon_version_2(&s, "ec-cineon-reset");
+    let mut s2 = Session::default();
+    s2.execute("file.open", json!({"path": path})).unwrap();
+    let _ = std::fs::remove_dir_all(dir);
+    s2.execute("time.set", json!({"time": 1.5})).unwrap();
+    s2.execute("effect.reset", json!({"layer": l, "effect": fx})).unwrap();
+    let g = effect_group(&s2, l, fx);
+    assert_eq!(g.prop("version").unwrap().value, KV::Scalar(1.0));
+    let keys: Vec<f64> = g.prop("gamma").unwrap().keys.iter().map(|k| k.value.as_f64()).collect();
+    assert_eq!(keys, [2.2, 3.4, 1.7]);
+    let got = s2.render(cid, Tick::ZERO, Default::default()).get(4, 4);
+    for c in 0..3 {
+        let want = cineon_version_1(input[c], 2.2);
+        assert!((got[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want} before", got[c]);
+    }
+}
+
 /// Removes what a build before Cineon Converter version 2 did not write into an animation
 /// preset: format 1, and no `cineonVersion` on its properties.
 fn preset_before_cineon_version_2(preset: &serde_json::Value) -> serde_json::Value {

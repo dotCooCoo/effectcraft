@@ -127,7 +127,8 @@ output: Log to Linear raises the linear value to `1.7 / gamma`. A new instance i
 instance saved before the parameter existed opens as version 1 (`migrate::legacy_default`), with
 its Gamma, keyframes and expressions unchanged, and renders as it did. A whole Cineon Converter
 applied from an animation preset saved before the parameter existed is also version 1. Opening a
-project does not change any expression or the project schema.
+project does not change any expression or the project schema. Reset keeps an instance's Version
+and sets Gamma to that version's default (1.7 for version 1).
 
 A project saved with the Version parameter opens in an earlier build, since its schema is still 2.
 That build keeps the Version parameter it does not know and reads every Gamma on version 1's
