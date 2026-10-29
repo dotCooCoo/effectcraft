@@ -458,64 +458,6 @@ fn same_point(a: &Value, b: &Value) -> bool {
     a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-6)
 }
 
-/// The Cineon Converter Gamma that gave linear output before project schema 3.
-pub const CINEON_LINEAR_GAMMA_BEFORE_SCHEMA_3: f64 = 1.7;
-
-/// Bring Cineon Converter's Gamma, saved before project schema 3, onto today's scale.
-///
-/// Log to Linear raised the linear value to `1.7 / gamma`, and Linear to Log to `gamma / 1.7`;
-/// they now use `1 / gamma` and `gamma`, so Gamma 1 is linear and a larger value lightens the
-/// midtones. Dividing the value, its keyframes and their speeds by 1.7 keeps
-/// what the effect renders. An enabled expression on Gamma reads its own value and keyframes on
-/// the old scale, and its result is divided by 1.7. Instances of other effects are left as they are.
-pub fn cineon_gamma_to_unit_scale(effect: &str, g: &mut PropGroup) {
-    if effect == "ec.utility.cineon"
-        && let Some(pr) = g.get_mut("gamma")
-    {
-        scale_cineon_gamma(pr);
-    }
-}
-
-/// [`cineon_gamma_to_unit_scale`] for one Gamma property (an animation preset that saved the
-/// property without its effect).
-pub fn scale_cineon_gamma(pr: &mut Property) {
-    if pr.has_expression()
-        && let Some(expr) = pr.expr.as_mut()
-    {
-        // `eval` returns the value of the expression's last statement, as the expression did;
-        // `__rewrite` gives the text the array maths the expression runtime gives every expression.
-        let quoted = serde_json::Value::String(std::mem::take(&mut expr.text)).to_string();
-        let f = CINEON_LINEAR_GAMMA_BEFORE_SCHEMA_3;
-        expr.text = format!("__readScaled({f});\neval(__rewrite({quoted})) / {f}");
-    }
-    let scale = |v: &mut Value| {
-        if let Value::Scalar(x) = v {
-            *x /= CINEON_LINEAR_GAMMA_BEFORE_SCHEMA_3;
-        }
-    };
-    scale(&mut pr.value);
-    for k in &mut pr.keys {
-        scale(&mut k.value);
-        for e in k.in_ease.iter_mut().chain(k.out_ease.iter_mut()) {
-            e.speed /= CINEON_LINEAR_GAMMA_BEFORE_SCHEMA_3;
-        }
-    }
-}
-
-/// For an expression on any other property of a project whose Cineon Converter Gammas
-/// [`scale_cineon_gamma`] converted: the expression reads those Gammas on the old scale.
-/// Expressions already converted are left as they are.
-pub fn read_cineon_gamma_on_old_scale(pr: &mut Property) {
-    if pr.has_expression()
-        && let Some(expr) = pr.expr.as_mut()
-        && !expr.text.starts_with("__readScaled(")
-        && !expr.text.starts_with("__readLegacyGamma(")
-    {
-        let quoted = serde_json::Value::String(std::mem::take(&mut expr.text)).to_string();
-        expr.text = format!("__readLegacyGamma({CINEON_LINEAR_GAMMA_BEFORE_SCHEMA_3});\neval(__rewrite({quoted}))");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -807,21 +749,5 @@ not a stroke",
         let before = twirl.clone();
         to_effect_space(spec, &mut twirl, SIZE, [0.0; 2], &|_| [0.0; 2]);
         assert_eq!(twirl, before);
-    }
-
-    #[test]
-    fn cineon_gamma_without_an_active_expression_scales_its_value() {
-        let spec = find("ec.utility.cineon").unwrap();
-        for (text, enabled) in [(" \n", true), ("2", false)] {
-            let mut next = 1;
-            let mut g = instantiate(spec, &mut Ids(&mut next), "Cineon Converter", [100.0, 50.0]);
-            let gamma = g.get_mut("gamma").unwrap();
-            gamma.value = Value::Scalar(1.7);
-            gamma.expr = Some(effectcraft_project::Expression { text: text.into(), enabled });
-            cineon_gamma_to_unit_scale(spec.id, &mut g);
-            let gamma = g.get_mut("gamma").unwrap();
-            assert_eq!(gamma.value, Value::Scalar(1.0), "{text:?}");
-            assert_eq!(gamma.expr.as_ref().map(|e| e.text.as_str()), Some(text));
-        }
     }
 }

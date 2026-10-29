@@ -40,8 +40,8 @@ pub use footage::{AlphaMode, CineonSettings, CineonUnits, FieldOrder, Footage, F
 pub use item::{Item, ItemId, ItemKind, LayerId};
 pub use layer::{AutoOrient, FrameBlend, Layer, LayerSource, LightKind, MatteKind, PrimitiveKind, Quality, Sampling, Switches, TrackMatte};
 pub use settings::{
-    APP_VERSION, BitDepth, ColorEngine, CuePoint, HdrMode, Marker, ProjectError, ProjectSettings, SCHEMA_CINEON_GAMMA, SCHEMA_EFFECT_SPACE, SCHEMA_VERSION,
-    SavedView, TimeDisplayStyle, is_newer_version, saved_by, saved_view,
+    APP_VERSION, BitDepth, ColorEngine, CuePoint, HdrMode, Marker, ProjectError, ProjectSettings, SCHEMA_EFFECT_SPACE, SCHEMA_VERSION, SavedView,
+    TimeDisplayStyle, is_newer_version, saved_by, saved_view,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
