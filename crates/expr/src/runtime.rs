@@ -79,6 +79,8 @@ pub struct Begin<'a> {
     /// Text Expression Selector `[textIndex, textTotal]` and `selectorValue` (percent).
     pub text_sel: [f64; 2],
     pub selector: [f64; 3],
+    pub self_scale: f64,
+    pub gamma_scale: f64,
 }
 
 /// Outcome of one script run.
@@ -300,6 +302,8 @@ impl Runtime {
             JsValue::from(b.text_sel[0]),
             JsValue::from(b.text_sel[1]),
             to_js(&crate::host::Resp::List(b.selector.iter().map(|x| crate::host::Resp::Num(*x)).collect()), ctx),
+            JsValue::from(b.self_scale),
+            JsValue::from(b.gamma_scale),
         ];
         if let Err(e) = self.begin.call(&JsValue::undefined(), &args, ctx) {
             return Run::Done(Err(format_error(&e.to_string(), line_count(text))));

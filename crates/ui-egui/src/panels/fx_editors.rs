@@ -835,7 +835,7 @@ const NO_CHANNEL: &str = "(none)";
 
 /// Whether `prop` (in group `g`) is one of EXtractoR's channel parameters.
 pub fn is_extractor_channel(g: &PropGroup, prop: &effectcraft_engine::project::Property) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect } if effect == EXTRACTOR) && EXTRACTOR_CHANNELS.contains(&prop.match_id.as_str())
+    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == EXTRACTOR) && EXTRACTOR_CHANNELS.contains(&prop.match_id.as_str())
 }
 
 /// The OpenEXR layer EXtractoR's red, green and blue come from (`""`: the unnamed layer), or

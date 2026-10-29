@@ -53,7 +53,7 @@ pub fn comp_has_audio(project: &Project, comp: ItemId) -> bool {
 /// Enabled audio effects of a layer (in stack order) with their effect ids.
 fn audio_effect_groups(l: &Layer) -> impl Iterator<Item = (&str, &effectcraft_project::PropGroup)> {
     l.effects().filter(|_| l.switches.effects).into_iter().flat_map(|fx| fx.groups()).filter(|g| g.enabled).filter_map(|g| match &g.kind {
-        GroupKind::Effect { effect } if audio_fx::is_audio_effect(effect) => Some((effect.as_str(), g)),
+        GroupKind::Effect { effect, .. } if audio_fx::is_audio_effect(effect) => Some((effect.as_str(), g)),
         _ => None,
     })
 }

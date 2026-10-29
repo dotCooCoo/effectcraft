@@ -113,7 +113,7 @@ fn apply_maps(root: &mut effectcraft_project::PropGroup, spec: &Value, at: Tick,
     for (path, text) in exprs {
         let body = text.as_str().filter(|t| !t.trim().is_empty() && t.len() <= MAX_EXPR);
         match (root.prop_mut(path), body) {
-            (Some(pr), Some(body)) if !pr.static_only => pr.expr = Some(Expression { text: body.to_string(), enabled: true }),
+            (Some(pr), Some(body)) if !pr.static_only => pr.expr = Some(Expression { text: body.to_string(), enabled: true, ..Default::default() }),
             _ => skipped.push(path.clone()),
         }
     }

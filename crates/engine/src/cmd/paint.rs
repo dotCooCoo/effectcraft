@@ -422,7 +422,7 @@ fn remove_stroke(s: &mut Session, p: &Value) -> Result<Value> {
         let fx = l.props.sub_mut("effects").ok_or_else(|| bad(cmd, "no effects"))?;
         for c in fx.children.iter_mut() {
             let Some(g) = c.as_group_mut() else { continue };
-            if !matches!(&g.kind, GroupKind::Effect { effect } if effect == paint::ID) {
+            if !matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == paint::ID) {
                 continue;
             }
             let before = g.children.len();

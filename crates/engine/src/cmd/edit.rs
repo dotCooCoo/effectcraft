@@ -450,7 +450,7 @@ fn copy_links(s: &mut Session, p: &Value, relative: bool) -> Result<Value> {
             }
             for uid in uids {
                 if let (Some(e), Some(pr)) = (link_expression(s, l.id, uid, relative), copy.props.find_mut(uid)) {
-                    pr.expr = Some(Expression { text: e, enabled: true });
+                    pr.expr = Some(Expression { text: e, enabled: true, ..Default::default() });
                 }
             }
             layers.push(copy);
@@ -502,7 +502,7 @@ fn paste_links(s: &mut Session, clip: LinkClip) -> Result<Value> {
         return Err(EngineError::Other("select a layer to paste into".into()));
     }
     let pairs: Vec<(String, Expression)> = match clip {
-        LinkClip::Links { links, .. } => links.into_iter().map(|(p, e)| (p, Expression { text: e, enabled: true })).collect(),
+        LinkClip::Links { links, .. } => links.into_iter().map(|(p, e)| (p, Expression { text: e, enabled: true, ..Default::default() })).collect(),
         LinkClip::Expressions(v) => v,
     };
     let n = s.edit("Paste", None, |proj, _| {
@@ -847,10 +847,12 @@ pub(crate) fn disk_stats(s: &mut Session, _: &Value) -> Result<Value> {
         "layers": dc.keys(effectcraft_render::disk_cache::Kind::Layer).len(),
         "bytes": st.bytes,
         "maxBytes": st.max_bytes,
+        "limitBytes": st.limit_bytes,
         "hits": st.hits,
         "misses": st.misses,
         "writes": st.writes,
         "evictions": st.evictions,
+        "failed": st.failed,
     }))
 }
 

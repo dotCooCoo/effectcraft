@@ -83,6 +83,9 @@ fn hdr_compression(ctx: &EffectCtx, mut b: Buf) -> Buf {
 
 // ---- Cineon (Kodak printing-density log encoding: 0.002 density per code value, negative gamma 0.6) ----
 
+// The former 0.01 guard expressed in unit-Gamma coordinates.
+const CINEON_MIN_GAMMA: f32 = 0.01 / 1.7;
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Cineon {
     pub black: f32,
@@ -106,7 +109,7 @@ impl Cineon {
         let off = self.offset();
         let code = v * 1023.0;
         let mut lin = (10f32.powf((code - self.white) * 0.002 / 0.6) - off) / (1.0 - off).max(1e-6);
-        lin = lin.max(0.0).powf(1.0 / self.gamma.max(0.01));
+        lin = lin.max(0.0).powf(1.0 / self.gamma.max(CINEON_MIN_GAMMA));
         let k = self.knee();
         if k < 1.0 && lin > k {
             let w = 1.0 - k;
@@ -124,7 +127,7 @@ impl Cineon {
             let w = 1.0 - k;
             lin = k - w * (1.0 - (lin - k) / w).max(1e-6).ln();
         }
-        lin = lin.max(0.0).powf(self.gamma.max(0.01));
+        lin = lin.max(0.0).powf(self.gamma.max(CINEON_MIN_GAMMA));
         let code = self.white + (lin * (1.0 - off) + off).max(1e-9).log10() * 0.6 / 0.002;
         code / 1023.0
     }
@@ -495,6 +498,23 @@ mod tests {
                 assert!((back - v).abs() < 1e-3, "gamma {gamma}, {code}: {back}");
             }
             assert!(c.log_to_lin(95.0 / 1023.0).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    fn cineon_legacy_gamma_guard_keeps_both_conversion_directions() {
+        let off = 10f32.powf((95.0 - 685.0) * 0.002 / 0.6);
+        // Just below the code white point: the large exponent stays visible instead of underflowing.
+        let code = 684.5f32 / 1023.0;
+        let base = (10f32.powf((code * 1023.0 - 685.0) * 0.002 / 0.6) - off) / (1.0 - off);
+        for old_gamma in [-1.0f32, 0.0, 0.005, 0.01, 0.02] {
+            let c = Cineon { black: 95.0, white: 685.0, ib: 0.0, iw: 1.0, gamma: old_gamma / 1.7, rolloff: 0.0 };
+            let expected = base.powf(1.7 / old_gamma.max(0.01));
+            assert!(expected > 0.1, "sample must expose the guard difference");
+            assert!((c.log_to_lin(code) - expected).abs() < 1e-5, "{old_gamma}");
+            let v = 0.75f32;
+            let expected_code = (685.0 + (v.powf(old_gamma.max(0.01) / 1.7) * (1.0 - off) + off).log10() * 0.6 / 0.002) / 1023.0;
+            assert!((c.lin_to_log(v) - expected_code).abs() < 1e-5, "inverse {old_gamma}");
         }
     }
 

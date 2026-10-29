@@ -443,7 +443,7 @@ fn time_dependent(layer: &Layer, effects: bool) -> bool {
         && let Some(fx) = layer.effects()
     {
         for g in fx.groups() {
-            if let effectcraft_project::GroupKind::Effect { effect } = &g.kind
+            if let effectcraft_project::GroupKind::Effect { effect, .. } = &g.kind
                 && g.enabled
                 && effectcraft_effects::is_time_dependent(effect)
             {
@@ -523,7 +523,7 @@ pub fn input_key(ctx: &EvalCtx, layer: &Layer, scale: f64, draft: bool, blur: bo
 fn reads_other_times(layer: &Layer) -> bool {
     layer.switches.effects
         && layer.effects().is_some_and(|fx| {
-            fx.groups().any(|g| g.enabled && matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect } if effect.starts_with("ec.time.")))
+            fx.groups().any(|g| g.enabled && matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect, .. } if effect.starts_with("ec.time.")))
         })
 }
 
@@ -692,9 +692,9 @@ fn reads_comp_scene(layer: &Layer) -> bool {
     layer.switches.effects
         && layer.effects().is_some_and(|fx| {
             fx.groups().any(|g| {
-                g.enabled
-                    && matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect } if effectcraft_effects::READS_COMP_SCENE.contains(&effect.as_str()))
-            })
+            g.enabled
+                && matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect, .. } if effectcraft_effects::READS_COMP_SCENE.contains(&effect.as_str()))
+        })
         })
 }
 

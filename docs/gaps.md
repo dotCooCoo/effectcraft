@@ -343,3 +343,11 @@ Issues #41–#47 (all from the Linux AppImage 0.1.1, 5 October): panning the vie
 | 2026-10-10 | major | Re-measured against After Effects 2026 26.5: two numbers (breadth ≈ 91%, ready ≈ 45%), dimension table with hours, a ranked list of 25 gaps with evidence, impact, estimate and parity doc; the real-user evidence moved into a report log under G2; links follow the rename of `parity.md` to `target-app-parity.md` |
 | 2026-10-08 | minor | User issues of 6–8 October and their regression evidence |
 | 2026-10-05 | major | First honest assessment: breadth ≈ 99% vs real use ≈ 30–50%; workstreams G1–G9 |
+
+2026-10-28: Cineon Converter compatibility is versioned per effect while the project stays at schema 2. Retained expressions keep their exact editable source, including while disabled; compatibility metadata preserves old Gamma reads and results. Shared Essential controls retain their public numbers while saved Gamma bindings convert separately, including nested instances and old animation presets; unrelated linked values keep their units. Pure unrelated wiggle expressions stay untouched. Scores and remaining estimates unchanged.
+
+2026-10-28 UI correction: On startup or an interface-language change, font menus receive glyph coverage for native and canonical labels from installed fonts. Language-preferred faces retain their order. Scores and remaining estimates unchanged.
+
+2026-10-28 rendering correction: Advanced3D GPU shadows follow the surface at each pixel center, including perspective and clipped geometry, so wide soft shadows stay aligned with CPU rendering. Scores and remaining estimates unchanged.
+
+2026-10-28: Chosen preset behavior: applying a version 1 preset to a mixed Essential control adopts retained shared units for that instance’s entire numeric output, including an existing expression. The expression text and its existing compatibility flags are preserved. This is an application rule, not a confirmed parity claim.

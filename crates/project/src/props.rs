@@ -52,6 +52,17 @@ pub enum ParamUi {
 pub struct Expression {
     pub text: String,
     pub enabled: bool,
+    /// Compatibility semantics for retained expressions; editing the source starts fresh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compat: Option<ExpressionCompat>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExpressionCompat {
+    /// Gamma's own values/keyframes read on the old scale, and its result converts to unit Gamma.
+    CineonGamma,
+    /// Other properties keep reading Cineon Gamma on the scale their expression was saved with.
+    CineonGammaReader,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -67,6 +78,12 @@ pub struct Property {
     pub keys: Vec<Keyframe>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expr: Option<Expression>,
+    /// Per-instance retained shared-control unit bindings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cineon_gamma_map: Option<crate::essential::gamma::Binding>,
+    /// This Essential value uses current Gamma units, including for retained expression reads.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cineon_gamma_units: bool,
     #[serde(default)]
     pub ui: ParamUi,
     /// Motion-path semantics (Position, Anchor Point, points).
@@ -99,6 +116,8 @@ impl Property {
             value,
             keys: vec![],
             expr: None,
+            cineon_gamma_map: None,
+            cineon_gamma_units: false,
             ui: ParamUi::Number,
             spatial: false,
             hold_only,
@@ -183,6 +202,9 @@ pub enum GroupKind {
     Effect {
         /// Effect spec id, e.g. `ec.blur.gaussian`.
         effect: String,
+        /// The effect's parameter semantics; absent in older saved instances.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        version: u32,
     },
     /// A motion tracker (Motion Trackers ▸ Tracker n) with its Tracker panel settings.
     Tracker { settings: Box<crate::tracking::TrackerSettings> },
@@ -261,6 +283,10 @@ pub struct PropGroup {
     pub label: Option<effectcraft_color::Label>,
     #[serde(default)]
     pub children: Vec<Node>,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
 }
 
 fn yes() -> bool {

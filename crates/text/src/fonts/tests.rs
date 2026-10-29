@@ -369,6 +369,22 @@ fn an_empty_glyph_does_not_cover_its_character() {
 /// substitute instead of Inter, and still reports itself missing (#1677).
 #[test]
 fn microsoft_families_resolve_to_metric_compatible_substitutes() {
+    // Exercise missing-family aliases against a known font set, independently of installed
+    // Microsoft fonts and concurrent tests that populate the process-global database.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        const CHILD: &str = "EFFECTCRAFT_TEST_ISOLATED_METRIC_ALIASES";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "fonts::tests::microsoft_families_resolve_to_metric_compatible_substitutes", "--nocapture"])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+            return;
+        }
+    }
+    db().write().unwrap().scanned = true;
     add_font_data(test_font("Carlito"));
     add_font_data(test_font("Caladea"));
     let calibri = resolve("Calibri", "Regular");

@@ -34,7 +34,7 @@ fn is_analyzing(s: &Session) -> std::result::Result<(), String> {
 }
 
 fn is_warp(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect } if effect == effectcraft_effects::warp_stab::ID)
+    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == effectcraft_effects::warp_stab::ID)
 }
 
 /// (comp, layer, effect uid) of a Warp Stabilizer: `layer` / `effect` (uid, name or 1-based

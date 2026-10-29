@@ -192,7 +192,7 @@ pub(crate) fn import_prop(im: &Im, j: &Json, p: &mut Property, conv: &dyn Fn(&Js
         return;
     }
     if let Some(x) = j.get("x").and_then(Json::as_str).filter(|x| !x.trim().is_empty()) {
-        p.expr = Some(Expression { text: x.to_string(), enabled: true });
+        p.expr = Some(Expression { text: x.to_string(), enabled: true, ..Default::default() });
     }
     let Some(k) = j.get("k") else { return };
     if !is_animated(j) {

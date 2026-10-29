@@ -145,7 +145,7 @@ fn group_json(g: &PropGroup, path: &str, l: &Layer, t: effectcraft_time::Tick, d
         GroupKind::Mask { mode, inverted, .. } => {
             o["mask"] = json!({"mode": mode.label(), "inverted": inverted});
         }
-        GroupKind::Effect { effect } => {
+        GroupKind::Effect { effect, .. } => {
             o["effect"] = json!(effect);
         }
         _ => {}

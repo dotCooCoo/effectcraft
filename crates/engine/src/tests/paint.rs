@@ -397,7 +397,7 @@ fn liquify_stroke_adds_the_effect_and_warps() {
     assert_eq!(r["strokes"], 1);
     let l = layer(&s, id);
     let fx = l.effects().unwrap().groups().next().unwrap().clone();
-    assert!(matches!(&fx.kind, effectcraft_project::GroupKind::Effect { effect } if effect == "ec.distort.liquify"));
+    assert!(matches!(&fx.kind, effectcraft_project::GroupKind::Effect { effect, .. } if effect == "ec.distort.liquify"));
     // The warp pulls transparent pixels from outside the layer over its left edge.
     assert!(px(&s, 0.0, 55, 50)[3] < 0.9, "{:?}", px(&s, 0.0, 55, 50));
     // A second stroke goes into the same effect.

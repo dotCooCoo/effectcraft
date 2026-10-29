@@ -121,13 +121,20 @@ their bottom-right quarter. Tracking data of effects that analyse footage (Warp 
 Camera Tracker, Mocha shape) is left as it is: footage has a source rectangle, whose effect space
 did not change.
 
-Schema 3 changed Cineon Converter's Gamma so that Gamma 1 gives linear output (it was 1.7): Log
-to Linear raises the linear value to `1 / gamma` (it was `1.7 / gamma`).
-Opening a project from an earlier schema divides each Cineon Converter's Gamma, its keyframes and
-their speeds by 1.7, so the effect renders as before; expressions are not rewritten. Animation
-presets carry the same change as format version 2 (`effectcraftAnimationPreset: 2`): applying a
-version 1 preset divides the Gamma of each Cineon Converter it holds, and a Gamma property it
-holds alone, by 1.7.
+Cineon Converter effect version 1 uses Gamma 1 for linear output (formerly 1.7): Log to Linear
+raises the linear value to `1 / gamma`, rather than `1.7 / gamma`. The project schema stays at 2.
+Opening an unversioned Cineon instance divides saved Gamma values, keyframes and ease speeds by
+1.7 before adding missing defaults, and records the effect version. Essential Properties overrides
+that exclusively expose those older Gamma controls convert with them, including nested controls.
+Retained expressions keep their editable text byte-for-byte. Compatibility metadata makes their
+Gamma reads and results retain the saved scale, including when a disabled expression is enabled
+later. Expressions without possible property-reading roots, such as an unrelated wiggle, stay
+untouched. Editing expression source clears its compatibility metadata; toggling enabled or
+resubmitting identical text preserves it. The normal cached expression evaluation handles these
+flags without adding an eval-and-rewrite wrapper.
+Animation preset format version 2 stores unit Gamma. Version 1 presets use the same conversion,
+including a Gamma property saved alone. A pre-release schema-3 project opens with its unit Gamma
+kept and is normalized to schema 2; existing source wrappers from that pre-release stay intact.
 
 ## 4. Rendering
 

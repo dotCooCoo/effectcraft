@@ -23,7 +23,7 @@ use std::sync::Arc;
 pub use effectcraft_color::ColorSpace;
 use effectcraft_color::{BlendMode, Label};
 use effectcraft_time::{FrameRate, Tick};
-pub use props::{Expression, FeatherFalloff, GroupKind, MaskMode, MaskMotionBlur, Node, ParamUi, PropGroup, Property, Uid, parse_path};
+pub use props::{Expression, ExpressionCompat, FeatherFalloff, GroupKind, MaskMode, MaskMotionBlur, Node, ParamUi, PropGroup, Property, Uid, parse_path};
 use serde::{Deserialize, Serialize};
 
 pub use effectcraft_keyframe as keyframe;
@@ -40,8 +40,8 @@ pub use footage::{AlphaMode, FieldOrder, Footage, FootageKind, Proxy, Solid, Sou
 pub use item::{Item, ItemId, ItemKind, LayerId};
 pub use layer::{AutoOrient, FrameBlend, Layer, LayerSource, LightKind, MatteKind, PrimitiveKind, Quality, Sampling, Switches, TrackMatte};
 pub use settings::{
-    APP_VERSION, BitDepth, ColorEngine, CuePoint, HdrMode, Marker, ProjectError, ProjectSettings, SCHEMA_CINEON_GAMMA, SCHEMA_EFFECT_SPACE, SCHEMA_VERSION,
-    SavedView, TimeDisplayStyle, is_newer_version, saved_by, saved_view,
+    APP_VERSION, BitDepth, ColorEngine, CuePoint, HdrMode, Marker, ProjectError, ProjectSettings, SCHEMA_EFFECT_SPACE, SCHEMA_VERSION, SavedView,
+    TimeDisplayStyle, is_newer_version, saved_by, saved_view,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

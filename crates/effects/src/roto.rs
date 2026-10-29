@@ -786,7 +786,7 @@ mod tests {
         let mut ids = Ids(&mut next);
         // The old layout: everything under Roto Brush Matte / Refine Edge Matte.
         let mut g = ids.group(ID, "Roto Brush & Refine Edge");
-        g.kind = effectcraft_project::GroupKind::Effect { effect: ID.into() };
+        g.kind = effectcraft_project::GroupKind::Effect { effect: ID.into(), version: 0 };
         let mut rb = ids.group("rotoBrushMatte", "Roto Brush Matte");
         rb.children.push(ids.prop("searchRadius", "Search Radius", Value::Scalar(33.0)).into());
         rb.children.push(ids.prop("feather", "Feather", Value::Scalar(2.0)).into());
