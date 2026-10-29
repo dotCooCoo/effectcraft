@@ -472,7 +472,7 @@ impl<'a> Renderer<'a> {
         // of losing them at its edge. Only when something will actually run, and not for an
         // adjustment layer, whose buffer is the comp below and already spans it.
         if !adjustment
-            && fx.groups().any(|g| g.enabled && matches!(&g.kind, GroupKind::Effect { effect, .. } if effectcraft_effects::find(effect).is_some_and(|s| !effectcraft_effects::audio_fx::is_audio_effect(s.id)))) {
+            && fx.groups().any(|g| g.enabled && matches!(&g.kind, GroupKind::Effect { effect } if effectcraft_effects::find(effect).is_some_and(|s| !effectcraft_effects::audio_fx::is_audio_effect(s.id)))) {
             target.cover(layer_size);
         }
         let mut mask_shapes = masks::shapes(ctx, layer);
@@ -484,7 +484,7 @@ impl<'a> Renderer<'a> {
         // Capture once, before preceding effects can expand or replace the input. An
         // adjustment stack's original is the comp below, not its solid source.
         let needs_original =
-            fx.groups().take(limit).any(|g| g.enabled && matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == "ec.channel.cccomposite"));
+            fx.groups().take(limit).any(|g| g.enabled && matches!(&g.kind, GroupKind::Effect { effect } if effect == "ec.channel.cccomposite"));
         let mut original = None;
         if needs_original {
             target.cpu(&mut |buf| {
@@ -511,7 +511,7 @@ impl<'a> Renderer<'a> {
             .take_while(|(i, _)| *i < limit)
             .filter(|(_, g)| g.enabled)
             .filter_map(|(i, g)| match &g.kind {
-                GroupKind::Effect { effect, .. } => effectcraft_effects::find(effect).map(|s| (i, g, s)),
+                GroupKind::Effect { effect } => effectcraft_effects::find(effect).map(|s| (i, g, s)),
                 _ => None,
             })
             .filter(|(_, _, s)| !effectcraft_effects::audio_fx::is_audio_effect(s.id))

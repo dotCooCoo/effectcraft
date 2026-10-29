@@ -2262,7 +2262,7 @@ fn roto_brush_ctrl_drag_resizes_the_brush() {
         let roto = effectcraft_engine::effects::roto::ID;
         let g = l
             .effects()
-            .and_then(|fx| fx.groups().find(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect, .. } if effect == roto)).cloned());
+            .and_then(|fx| fx.groups().find(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect } if effect == roto)).cloned());
         g.map(|g| effectcraft_engine::effects::roto::data(&effectcraft_engine::effects::flatten_params(&g, &mut |p| p.value.clone())).strokes.clone())
             .unwrap_or_default()
     };

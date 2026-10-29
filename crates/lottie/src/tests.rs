@@ -588,7 +588,7 @@ fn effects_expressions_and_warnings() {
         }
     }
     p.next_id = next;
-    l.props.prop_mut("transform/rotation").unwrap().expr = Some(Expression { text: "time * 90".into(), enabled: true, ..Default::default() });
+    l.props.prop_mut("transform/rotation").unwrap().expr = Some(Expression { text: "time * 90".into(), enabled: true });
     push(&mut p, cid, l);
     let c = comp(&p, cid);
     let cam = build::layer(&mut p, &c, "Camera 1", LayerSource::Camera, (c.width, c.height), None);

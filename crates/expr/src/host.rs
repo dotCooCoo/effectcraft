@@ -43,7 +43,7 @@ pub enum Req {
     /// `[path, isGroup, name, matchName, numChildren, propertyIndex]`, `"layer"` when that is the
     /// layer itself, or null above the layer.
     Ancestor { comp: u64, layer: u64, path: String, up: i64 },
-    /// `[name, uid, kind, dims, keyTimes, keyValues, hasExpression, propertyIndex, matchName, cineonGammaUnits]`.
+    /// `[name, uid, kind, dims, keyTimes, keyValues, hasExpression, propertyIndex, matchName]`.
     PropInfo { comp: u64, layer: u64, path: String },
     /// Value at comp time `t`; `pre` = keyframes only (no expression).
     Value { comp: u64, layer: u64, path: String, t: Secs, pre: bool },
@@ -423,7 +423,6 @@ impl<'a> Resolver<'a> {
                     Resp::Bool(p.has_expression()),
                     Resp::Num(index.unwrap_or(1) as f64),
                     Resp::Str(p.match_id.clone()),
-                    Resp::Bool(p.cineon_gamma_units),
                 ])
             }
             Req::Value { comp, layer, path, t, pre } => {

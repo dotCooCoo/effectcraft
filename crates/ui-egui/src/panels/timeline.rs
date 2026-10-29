@@ -832,7 +832,7 @@ fn search_rows(l: &Layer, q: &str) -> Vec<Row> {
                     // An effect group also matches the name the row draws, so a search finds
                     // `高斯模糊` in a Chinese interface and `Gaussian Blur` in an English one.
                     let hit = sg.name.to_lowercase().contains(q)
-                        || matches!(&sg.kind, GroupKind::Effect { effect, .. } if crate::i18n::effects::matches(effect, &sg.name, q));
+                        || matches!(&sg.kind, GroupKind::Effect { effect } if crate::i18n::effects::matches(effect, &sg.name, q));
                     if hit {
                         out.push(group_row(l, sg, depth, g));
                         all(l, sg, depth + 1, out);
@@ -1034,7 +1034,7 @@ fn reveal_rows(app: &EffectcraftApp, l: &Layer, kinds: &[String], rows: &mut Vec
             && let Some(fx) = l.effects()
         {
             let mut only = fx.clone();
-            only.children.retain(|c| matches!(c, Node::Group(g) if matches!(&g.kind, GroupKind::Effect { effect, .. } if keep(effect))));
+            only.children.retain(|c| matches!(c, Node::Group(g) if matches!(&g.kind, GroupKind::Effect { effect } if keep(effect))));
             group_rows(rows, &only, true);
         }
     }
@@ -3327,7 +3327,7 @@ fn group_background(app: &mut EffectcraftApp, g: &Rw, rc: &RowCtx<'_>) -> String
     let RowKind::Group { uid, name, .. } = &rc.row.kind else { return String::new() };
     let group = layer.props.find_group(*uid);
     let shown = match group.and_then(|g| match &g.kind {
-        GroupKind::Effect { effect, .. } => Some(effect.as_str()),
+        GroupKind::Effect { effect } => Some(effect.as_str()),
         _ => None,
     }) {
         Some(effect) => crate::i18n::effects::group(effect, name),

@@ -121,7 +121,7 @@ pub use sim2::{
     CausticsSetup, FoamDisc, FoamEnv, FoamPlan, Piece, PiecePlan, PieceTex, PixelPlan, WavePlan, Waves, caustics_setup, foam_full_plan, piece_plan, pixel_plan,
     wave_world_plan,
 };
-pub use utility::{Lut, load_lut};
+pub use utility::{Lut, cineon_gamma, cineon_gamma_scale, load_lut};
 pub use vr::{equi_dir as vr_equi_dir, rotation as vr_rotation};
 
 /// Effect categories in Effects & Presets order.
@@ -248,7 +248,7 @@ pub fn flatten_params(g: &PropGroup, eval: &mut dyn FnMut(&Property) -> Value) -
 /// parameters evaluated by `eval`: settings it can't render as asked, such as an OCIO config it
 /// can't read or transforms it passes through. `None` when it renders as asked.
 pub fn warning(g: &PropGroup, eval: &mut dyn FnMut(&Property) -> Value) -> Option<String> {
-    let GroupKind::Effect { effect, .. } = &g.kind else { return None };
+    let GroupKind::Effect { effect } = &g.kind else { return None };
     // Only the effects that can warn evaluate their parameters.
     if !ocio::CUSTOM_CONFIG_FX.contains(&effect.as_str()) {
         return None;
@@ -683,7 +683,7 @@ pub fn layer_source_id(id: &str) -> String {
 /// Build the property group for a new instance of an effect.
 pub fn instantiate(spec: &EffectSpec, ids: &mut Ids, instance_name: &str, layer_size: [f64; 2]) -> PropGroup {
     let mut g = ids.group(spec.id, instance_name);
-    g.kind = GroupKind::Effect { effect: spec.id.to_string(), version: migrate::current_version(spec.id) };
+    g.kind = GroupKind::Effect { effect: spec.id.to_string() };
     for ps in &spec.params {
         let default = default_value(ps, layer_size);
         // `group/sub/param` ids nest the parameter in twirl-down groups (Warp Stabilizer's

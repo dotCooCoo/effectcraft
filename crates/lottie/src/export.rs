@@ -244,7 +244,7 @@ impl Doc<'_> {
         let Some(fx) = l.effects() else { return vec![] };
         let mut out = vec![];
         for (i, g) in fx.groups().enumerate() {
-            let GroupKind::Effect { effect, .. } = &g.kind else { continue };
+            let GroupKind::Effect { effect } = &g.kind else { continue };
             let label = format!("{} ▸ {}", l.name, g.name);
             let Some(map) = fx_by_id(effect) else {
                 self.ex.warn(format!("{label}: effect not supported by Lottie (skipped)"));

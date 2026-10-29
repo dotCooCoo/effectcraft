@@ -157,13 +157,13 @@ impl RotoJob {
 }
 
 pub(crate) fn is_roto(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == fx::ID)
+    matches!(&g.kind, GroupKind::Effect { effect } if effect == fx::ID)
 }
 
 /// An Object Matte instance (its Input Key is kept current like Roto Brush's; it segments on
 /// demand while rendering).
 pub(crate) fn is_object_matte(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == effectcraft_effects::object_matte::ID)
+    matches!(&g.kind, GroupKind::Effect { effect } if effect == effectcraft_effects::object_matte::ID)
 }
 
 /// What an Object Matte's segmentation is made from besides its frames: the prompt and tracking

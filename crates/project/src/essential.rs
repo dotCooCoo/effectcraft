@@ -20,8 +20,6 @@ use crate::{ItemId, ItemKind, Layer, LayerId, LayerSource, Project, Value};
 /// Match id of the Essential Properties group on precomp layers.
 pub const GROUP: &str = "essential";
 
-pub mod gamma;
-
 /// A composition's Essential Graphics definition.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct EssentialGraphics {
@@ -44,12 +42,6 @@ pub struct EgControl {
     /// [`ControlType::Scale`] slider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub as_type: Option<ControlType>,
-    /// Saved shared-control bindings whose target now stores unit Gamma.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub legacy_gamma_targets: Vec<EgLink>,
-    /// Stable public units after conversion, also used by retained readers.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub cineon_gamma_units: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -369,9 +361,7 @@ fn sync_links(before: &Project, p: &mut Project) {
                 if !linkable(src, dst) {
                     continue;
                 }
-                let mut mapped = src.clone();
-                gamma::scale_property(&mut mapped, gamma::factor(c, k.0, k.1) / gamma::factor(c, lead.0, lead.1));
-                let keys: Vec<_> = mapped
+                let keys: Vec<_> = src
                     .keys
                     .iter()
                     .map(|kf| {
@@ -380,8 +370,8 @@ fn sync_links(before: &Project, p: &mut Project) {
                         kf
                     })
                     .collect();
-                if dst.value != mapped.value || dst.keys != keys {
-                    writes.push((k.0, k.1, mapped.value.clone(), keys));
+                if dst.value != src.value || dst.keys != keys {
+                    writes.push((k.0, k.1, src.value.clone(), keys));
                 }
             }
         }
@@ -451,24 +441,13 @@ fn build_group(project: &Project, comp: ItemId, eg: &EssentialGraphics, old: Opt
                     let mut p = Property { uid, match_id: m, name: c.name.clone(), keys: vec![], expr: None, ..src.clone() };
                     // Instance properties follow the source's look but are always editable.
                     p.static_only = false;
-                    let master = project.comp(comp).and_then(|cm| cm.essential.as_ref()).and_then(|eg| eg.resolve(c.id)).unwrap_or(c);
-                    if let Some((lid, uid)) = master.kind.targets().first() {
-                        gamma::scale_property(&mut p, 1.0 / gamma::factor(master, *lid, *uid));
-                    }
-                    p.cineon_gamma_map = gamma::definition_map(project, comp, c.id);
-                    p.cineon_gamma_units = master.cineon_gamma_units;
                     if let Some(prev) = prev.filter(|pp| over.contains(&pp.uid)) {
                         p.value = prev.value.clone();
                         p.keys = prev.keys.clone();
                         p.expr = prev.expr.clone();
-                        p.cineon_gamma_map = prev.cineon_gamma_map.clone();
-                        p.cineon_gamma_units = prev.cineon_gamma_units;
                         keep.push(uid);
                     } else {
                         p.value = src.value_at(effectcraft_time::Tick::ZERO);
-                        if let Some((lid, uid)) = master.kind.targets().first() {
-                            gamma::scale_value(&mut p.value, 1.0 / gamma::factor(master, *lid, *uid));
-                        }
                     }
                     out.push(Node::Prop(p));
                 }
@@ -502,8 +481,6 @@ fn build_group(project: &Project, comp: ItemId, eg: &EssentialGraphics, old: Opt
             dst.value = src.value.clone();
             dst.keys = src.keys.clone();
             dst.expr = src.expr.clone();
-            dst.cineon_gamma_map = src.cineon_gamma_map.clone();
-            dst.cineon_gamma_units = src.cineon_gamma_units;
             keep.retain(|u| *u != dst.uid);
             if keep.contains(&src.uid) {
                 keep.push(dst.uid);
@@ -556,13 +533,7 @@ fn propagate_mirrors(before: &Project, after: &mut Project) {
                 let (mm, cm) = (match_id(master.id), match_id(c.id));
                 let (Some(mp), Some(cp)) = (find_prop(&g.children, &mm), find_prop(&g.children, &cm)) else { continue };
                 let (Some(omp), Some(ocp)) = (find_prop(&og.children, &mm), find_prop(&og.children, &cm)) else { continue };
-                let changed = |a: &Property, b: &Property| {
-                    a.value != b.value
-                        || a.keys != b.keys
-                        || a.expr != b.expr
-                        || a.cineon_gamma_map != b.cineon_gamma_map
-                        || a.cineon_gamma_units != b.cineon_gamma_units
-                };
+                let changed = |a: &Property, b: &Property| a.value != b.value || a.keys != b.keys || a.expr != b.expr;
                 if changed(cp, ocp) && !changed(mp, omp) {
                     writes.push((i, mm, cp.clone()));
                 }
@@ -579,8 +550,6 @@ fn propagate_mirrors(before: &Project, after: &mut Project) {
                 dst.value = src.value;
                 dst.keys = src.keys;
                 dst.expr = src.expr;
-                dst.cineon_gamma_map = src.cineon_gamma_map;
-                dst.cineon_gamma_units = src.cineon_gamma_units;
             }
         }
     }
@@ -607,11 +576,7 @@ fn mark_overrides(before: &Project, after: &mut Project) {
                     return;
                 }
                 if let Some(op) = og.find(p.uid)
-                    && (op.value != p.value
-                        || op.keys != p.keys
-                        || op.expr != p.expr
-                        || op.cineon_gamma_map != p.cineon_gamma_map
-                        || op.cineon_gamma_units != p.cineon_gamma_units)
+                    && (op.value != p.value || op.keys != p.keys || op.expr != p.expr)
                 {
                     add.push(p.uid);
                 }
@@ -637,13 +602,6 @@ fn mark_overrides(before: &Project, after: &mut Project) {
 /// After an edit: mark changed master properties as overridden, then add, update or remove the
 /// Essential Properties groups of every precomp layer so they match their comp's controls.
 pub fn sync_project(before: &Project, after: &mut Project) {
-    // Binding maintenance is not an instance edit. Compare both sides after the same pruning,
-    // while retaining explicit new preset metadata as a real override change.
-    let mut normalized_before = before.clone();
-    gamma::prune_against(&mut normalized_before, after);
-    let before = &normalized_before;
-    gamma::prune(after);
-    gamma::mark_units(after);
     sync_links(before, after);
     propagate_mirrors(before, after);
     mark_overrides(before, after);
@@ -694,7 +652,6 @@ pub fn sync_project(before: &Project, after: &mut Project) {
 pub struct Override {
     pub control: u64,
     pub value: Value,
-    pub gamma_map: Option<gamma::Binding>,
 }
 
 /// The project as an instance of `comp` renders it: each overridden control's source property
@@ -728,27 +685,7 @@ pub fn with_overrides(project: &Project, comp: ItemId, overrides: &[Override]) -
                     if let Some(pr) = c.layer_mut(layer).and_then(|l| l.props.find_mut(prop)) {
                         pr.keys.clear();
                         pr.value = o.value.clone();
-                        let mut source = Property::new(0, "", "", o.value.clone());
-                        source.cineon_gamma_map = o.gamma_map.clone();
-                        let mapped = gamma::to_target(ctl, comp, layer, prop, &source);
-                        if control_of(&pr.match_id).is_some()
-                            && let Some(units) = gamma::target_units(ctl, comp, layer, prop, &source)
-                        {
-                            pr.cineon_gamma_units = units;
-                        }
-                        pr.value = mapped.value;
-                        if o.gamma_map.is_some() {
-                            pr.cineon_gamma_map = mapped.cineon_gamma_map;
-                        }
                         any = true;
-                    }
-                    // An exposed nested instance value must reach its own inner composition.
-                    if let Some(g) = c.layer_mut(layer).and_then(|l| l.props.sub_mut(GROUP))
-                        && g.find(prop).is_some()
-                        && let GroupKind::Essential { overridden } = &mut g.kind
-                        && !overridden.contains(&prop)
-                    {
-                        overridden.push(prop);
                     }
                 }
             }
@@ -788,10 +725,6 @@ pub fn offset_ids(p: &mut Project, offset: u64) {
                 fn go(v: &mut [EgControl], o: u64) {
                     for c in v {
                         c.id = c.id.saturating_add(o);
-                        for k in &mut c.legacy_gamma_targets {
-                            k.layer.0 = k.layer.0.saturating_add(o);
-                            k.prop = k.prop.saturating_add(o);
-                        }
                         match &mut c.kind {
                             EgKind::Property { layer, prop, links } => {
                                 *layer = LayerId(layer.0.saturating_add(o));
@@ -848,9 +781,6 @@ fn offset_layer(l: &mut Layer, o: u64) {
             match c {
                 Node::Prop(p) => {
                     p.uid = p.uid.saturating_add(o);
-                    if let Some(m) = &mut p.cineon_gamma_map {
-                        m.offset(o);
-                    }
                     let fix = |v: &mut Value| {
                         if let Value::Layer(Some(id)) = v {
                             *id = id.saturating_add(o);

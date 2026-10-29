@@ -507,7 +507,7 @@ mod tests {
         let mut next = 1;
         let mut ids = Ids(&mut next);
         let mut g = ids.group(spec.id, "Fractal Noise");
-        g.kind = GroupKind::Effect { effect: spec.id.into(), version: 0 };
+        g.kind = GroupKind::Effect { effect: spec.id.into() };
         for (m, v) in [
             ("fractalType", Value::Enum(1)),
             ("invert", Value::Bool(false)),

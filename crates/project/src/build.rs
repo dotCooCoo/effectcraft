@@ -222,7 +222,7 @@ pub fn expression_selector(ids: &mut Ids, name: &str) -> PropGroup {
     let mut g = ids.group("expressionSelector", name);
     g.kind = GroupKind::Indexed;
     let mut amount = ids.prop("amount", "Amount", Value::Vec3([100.0, 100.0, 100.0])).with_ui(ParamUi::Percent);
-    amount.expr = Some(crate::props::Expression { text: EXPRESSION_SELECTOR_DEFAULT.into(), enabled: true, ..Default::default() });
+    amount.expr = Some(crate::props::Expression { text: EXPRESSION_SELECTOR_DEFAULT.into(), enabled: true });
     g.with(fixed(ids.prop("basedOn", "Based On", Value::Enum(0)).with_ui(popup(BASED_ON)))).with(amount)
 }
 

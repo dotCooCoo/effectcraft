@@ -1,5 +1,4 @@
 use super::{Arc, EditorState, EngineError, Event, History, ItemId, Project, Result, Session, camera_track, commands, roto, warp};
-use effectcraft_project::Layer;
 
 impl Session {
     /// Apply an undoable edit. `merge`: consecutive edits with the same key fold into one step.
@@ -267,9 +266,7 @@ impl Session {
 
 /// Bring effect instances saved by earlier versions up to date with the effect registry
 /// (renamed / regrouped / added parameters, reordered popups; see
-/// [`effectcraft_effects::migrate`]), Cineon Converter's Gamma and the Essential Properties
-/// values that expose an unversioned Gamma, preserving retained expressions through
-/// compatibility metadata, and projects from before
+/// [`effectcraft_effects::migrate`]), and a project from before
 /// [`effectcraft_project::SCHEMA_EFFECT_SPACE`] into effect space
 /// ([`effectcraft_effects::migrate::to_effect_space`]). Shape path operations get the
 /// properties added since ([`effectcraft_project::build::upgrade_shape_contents`]). Stamps the
@@ -283,17 +280,6 @@ pub fn upgrade_effects(p: &mut Project) {
             bounds.insert((*cid, l.id), effectcraft_render::effect_bounds(p, c, l));
         }
     }
-    let has_cineon = p.comps().any(|(_, c)| {
-        c.layers.iter().any(|l| {
-            l.props.sub("effects").is_some_and(|fx| {
-                fx.groups()
-                    .any(|g| matches!(&g.kind, effectcraft_project::GroupKind::Effect { effect, version } if effect == "ec.utility.cineon" && *version == 0))
-            })
-        })
-    });
-    let old_controls = cineon_gamma_controls_where(p, true);
-    effectcraft_project::essential::gamma::migrate_bindings(p);
-    cineon_gamma_instance_values_to_unit_scale(p, &old_controls);
     let mut next = p.next_id;
     for (cid, it) in p.items.iter_mut() {
         let effectcraft_project::ItemKind::Comp(c) = &mut it.kind else { continue };
@@ -313,7 +299,7 @@ pub fn upgrade_effects(p: &mut Project) {
             let Some(fx) = l.props.sub_mut("effects") else { continue };
             for n in &mut fx.children {
                 let effectcraft_project::Node::Group(g) = n else { continue };
-                let effectcraft_project::GroupKind::Effect { effect, .. } = &g.kind else { continue };
+                let effectcraft_project::GroupKind::Effect { effect } = &g.kind else { continue };
                 if let Some(spec) = effectcraft_effects::find(effect) {
                     effectcraft_effects::migrate::upgrade_instance(spec, g, &mut effectcraft_project::build::Ids(&mut next), size);
                     if to_effect_space {
@@ -323,46 +309,6 @@ pub fn upgrade_effects(p: &mut Project) {
             }
         }
     }
-    if has_cineon {
-        for it in p.items.values_mut() {
-            let effectcraft_project::ItemKind::Comp(c) = &mut it.kind else { continue };
-            for l in &mut std::sync::Arc::make_mut(c).layers {
-                l.props.walk_mut(&mut |pr| effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(pr));
-            }
-        }
-    }
     p.next_id = next;
     p.schema = effectcraft_project::SCHEMA_VERSION;
-}
-
-pub(crate) fn cineon_gamma_controls(p: &Project) -> std::collections::HashSet<(ItemId, u64)> {
-    cineon_gamma_controls_where(p, false)
-}
-
-fn cineon_gamma_controls_where(p: &Project, legacy_only: bool) -> std::collections::HashSet<(ItemId, u64)> {
-    effectcraft_project::essential::gamma::exclusive(p, legacy_only)
-}
-
-fn cineon_gamma_instance_values_to_unit_scale(p: &mut Project, controls: &std::collections::HashSet<(ItemId, u64)>) {
-    use effectcraft_project::essential;
-    if controls.is_empty() {
-        return;
-    }
-    for it in p.items.values_mut() {
-        let effectcraft_project::ItemKind::Comp(c) = &mut it.kind else { continue };
-        let nests = |l: &Layer| matches!(l.source, effectcraft_project::LayerSource::Comp { item } if controls.iter().any(|(cid, _)| *cid == item));
-        if !c.layers.iter().any(nests) {
-            continue;
-        }
-        for l in &mut Arc::make_mut(c).layers {
-            let effectcraft_project::LayerSource::Comp { item } = l.source else { continue };
-            let Some(g) = l.props.sub_mut(essential::GROUP) else { continue };
-            g.walk_mut(&mut |pr| {
-                if essential::control_of(&pr.match_id).is_some_and(|id| controls.contains(&(item, id))) {
-                    effectcraft_effects::migrate::scale_cineon_gamma(pr);
-                    pr.cineon_gamma_units = true;
-                }
-            });
-        }
-    }
 }

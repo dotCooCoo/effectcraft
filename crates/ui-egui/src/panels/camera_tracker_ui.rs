@@ -50,7 +50,7 @@ struct Active {
 type Hit = (u32, Pos2, f32);
 
 fn tracker_group(l: &Layer, uid: Uid) -> Option<&PropGroup> {
-    l.props.find_group(uid).filter(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect, .. } if effect == ct::ID))
+    l.props.find_group(uid).filter(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect } if effect == ct::ID))
 }
 
 /// The selected 3D Camera Tracker effect on an active layer (After Effects shows the points
@@ -382,7 +382,7 @@ fn banner(app: &mut EffectcraftApp, painter: &egui::Painter, map: &ViewerMap, ec
     // A failed solve: tracks without a solve while nothing is running or queued.
     for l in comp.layers.iter().filter(|l| l.is_active_at(time)) {
         let Some(fx) = l.effects() else { continue };
-        for g in fx.groups().filter(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect, .. } if effect == ct::ID)) {
+        for g in fx.groups().filter(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect } if effect == ct::ID)) {
             let params = effectcraft_engine::camera_track::static_params(g);
             let hide = effectcraft_engine::effects::warp_stab::param(&params, "advanced/hideWarningBanner").is_some_and(Value::as_bool);
             let solve_key = matches!(g.prop(ct::SOLVE_KEY).map(|p| &p.value), Some(Value::Str(s)) if !s.is_empty());

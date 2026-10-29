@@ -225,17 +225,11 @@ fn controls(app: &mut EffectcraftApp, ui: &mut egui::Ui, cid: ItemId, list: &[Eg
                         let r = ui.label(RichText::new(text).color(t.accent).size(10.0)).on_hover_text(&tip);
                         app.auto.add(&format!("essential.control.{}.badge", c.id), r.rect, &tip);
                     }
-                    let master = eg.resolve(c.id).unwrap_or(c);
-                    let src = essential::source_prop(&app.session.project, cid, c).map(|(l, p)| {
-                        let factor = essential::gamma::factor(master, l.id, p.uid);
-                        let mut shown = p.clone();
-                        essential::gamma::scale_property(&mut shown, 1.0 / factor);
-                        (l.id.0, l.layer_time(app.session.time()), shown, factor)
-                    });
+                    let src = essential::source_prop(&app.session.project, cid, c).map(|(l, p)| (l.id.0, l.layer_time(app.session.time()), p.clone()));
                     match src {
-                        Some((layer, lt, p, factor)) => {
+                        Some((layer, lt, p)) => {
                             let v = p.value_at(lt);
-                            if let Some(mut nv) = value_widget(
+                            if let Some(nv) = value_widget(
                                 app,
                                 ui,
                                 &format!("essential.control.{}.value", c.id),
@@ -243,11 +237,6 @@ fn controls(app: &mut EffectcraftApp, ui: &mut egui::Ui, cid: ItemId, list: &[Eg
                                 &p,
                                 &v,
                             ) {
-                                if factor != 1.0
-                                    && let Some(x) = nv.as_f64()
-                                {
-                                    nv = json!(x * factor);
-                                }
                                 actions.push((
                                     "prop.set".into(),
                                     json!({"comp": cid.0, "layer": layer, "prop": p.uid, "value": nv, "merge": format!("eg-{}", c.id)}),

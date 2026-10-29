@@ -616,20 +616,16 @@ fn toggle_transform_key(s: &mut Session, p: &Value) -> Result<Value> {
 fn apply_expr(pr: &mut Property, text: &Option<String>, enabled: Option<bool>, def: &str) {
     match (text, enabled) {
         (Some(t), _) if t.trim().is_empty() => pr.expr = None,
-        (Some(t), e) => {
-            let compat = pr.expr.as_ref().filter(|old| old.text == *t).and_then(|old| old.compat);
-            pr.expr = Some(effectcraft_project::Expression { text: t.clone(), enabled: e.unwrap_or(true), compat });
-        }
+        (Some(t), e) => pr.expr = Some(effectcraft_project::Expression { text: t.clone(), enabled: e.unwrap_or(true) }),
         (None, Some(e)) => {
             if let Some(x) = &mut pr.expr {
                 x.enabled = e;
             } else if e {
-                pr.expr = Some(effectcraft_project::Expression { text: def.to_string(), enabled: true, ..Default::default() });
+                pr.expr = Some(effectcraft_project::Expression { text: def.to_string(), enabled: true });
             }
         }
         (None, None) => {
-            pr.expr =
-                if pr.expr.is_some() { None } else { Some(effectcraft_project::Expression { text: def.to_string(), enabled: true, ..Default::default() }) };
+            pr.expr = if pr.expr.is_some() { None } else { Some(effectcraft_project::Expression { text: def.to_string(), enabled: true }) };
         }
     }
 }
@@ -690,7 +686,7 @@ fn default_value(s: &Session, cid: ItemId, lid: LayerId, uid: Uid) -> Option<eff
     let pr = layer.props.find(uid)?;
     let effect = layer.props.node_chain(uid)?.into_iter().find_map(|n| match n {
         effectcraft_project::Node::Group(g) => match &g.kind {
-            GroupKind::Effect { effect, .. } => Some(effect.clone()),
+            GroupKind::Effect { effect } => Some(effect.clone()),
             _ => None,
         },
         _ => None,

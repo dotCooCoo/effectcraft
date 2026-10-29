@@ -124,7 +124,7 @@ impl Fx {
     }
     fn set_expr(&mut self, layer: LayerId, path: &str, text: &str) {
         let l = self.p.comp_mut(self.cid).unwrap().layer_mut(layer).unwrap();
-        l.props.prop_mut(path).unwrap().expr = Some(Expression { text: text.into(), enabled: true, ..Default::default() });
+        l.props.prop_mut(path).unwrap().expr = Some(Expression { text: text.into(), enabled: true });
     }
     fn layer_mut(&mut self, layer: LayerId) -> &mut Layer {
         self.p.comp_mut(self.cid).unwrap().layer_mut(layer).unwrap()
@@ -498,52 +498,6 @@ fn effect_slider_with_expression_drives_another_layer() {
     let mut f = fx();
     f.set_expr(f.a, "effects/#1/slider", "time * 5");
     assert_close!(f.ev(f.b, ROT, "thisComp.layer('A').effect('Slider Control')('Slider')", 2.0).unwrap().as_f64(), 10.0);
-}
-
-#[test]
-fn cineon_gamma_migration_keeps_expression_results() {
-    // The slider is keyed 42 at 0 s and 84 at 2 s, and read at 1 s (63).
-    for text in [
-        "1.7",
-        "var g = value / 63;\ng * 1.7",
-        "thisProperty.valueAtTime(0) / 42 * 1.7",
-        "key(2).value / 84 * 1.7",
-        "let value = 1.7; value",
-        "([0.85, 0] * 2)[0]",
-    ] {
-        let mut f = fx();
-        f.set_expr(f.a, "effects/#1/slider", text);
-        let pr = f.layer_mut(f.a).props.prop_mut("effects/#1/slider").unwrap();
-        pr.keys = vec![Keyframe::new(Tick::ZERO, Value::Scalar(42.0)), Keyframe::new(secs(2.0), Value::Scalar(84.0))];
-        effectcraft_effects::migrate::scale_cineon_gamma(pr);
-        assert_eq!(pr.keys[0].value, Value::Scalar(42.0 / 1.7), "{text}");
-        let read = f.ev(f.b, ROT, "thisComp.layer('A').effect('Slider Control')('Slider')", 1.0);
-        assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 1.0).abs() < 1e-9), "{text}: {read:?}");
-    }
-}
-
-#[test]
-fn cineon_gamma_migration_keeps_reads_of_another_gamma() {
-    let mut f = fx();
-    let spec = effectcraft_effects::find("ec.utility.cineon").unwrap();
-    for (name, value, expr) in [("C1", 1.7, None), ("C2", 1.0, Some("effect('C1')('Gamma')"))] {
-        let mut g = group_push(&mut f.p, |ids| effectcraft_effects::instantiate(spec, ids, name, [20.0, 20.0]));
-        let gamma = g.get_mut("gamma").unwrap();
-        gamma.value = Value::Scalar(value);
-        gamma.expr = expr.map(|text| Expression { text: text.into(), enabled: true, ..Default::default() });
-        if let effectcraft_project::GroupKind::Effect { version, .. } = &mut g.kind {
-            *version = 0;
-        }
-        effectcraft_effects::migrate::cineon_gamma_to_unit_scale(spec.id, &mut g);
-        f.layer_mut(f.b).props.sub_mut("effects").unwrap().children.push(g.into());
-    }
-    let read = f.ev(f.a, ROT, "thisComp.layer('B').effect('C2')('Gamma')", 0.0);
-    assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 1.0).abs() < 1e-9), "{read:?}");
-    // An expression on another property reads Gamma as it was saved.
-    f.set_expr(f.a, ROT, "thisComp.layer('B').effect('C1')('Gamma') * 100");
-    effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(f.layer_mut(f.a).props.prop_mut(ROT).unwrap());
-    let read = f.ev(f.b, ROT, "thisComp.layer('A').transform.rotation", 0.0);
-    assert!(read.as_ref().is_ok_and(|v| (v.as_f64() - 170.0).abs() < 1e-9), "{read:?}");
 }
 
 #[test]
@@ -1085,7 +1039,7 @@ fn expression_drives_rotation_in_a_rendered_frame() {
     let cid = p.add_item("Comp", Label::Sandstone, None, ItemKind::Comp(comp.clone().into()));
     // A 80×10 horizontal bar at the centre; rotating 90° makes it vertical.
     let mut bar = solid(&mut p, &comp, "Bar", [1.0, 1.0, 1.0], 80, 10);
-    bar.props.prop_mut(ROT).unwrap().expr = Some(Expression { text: "time * 360".into(), enabled: true, ..Default::default() });
+    bar.props.prop_mut(ROT).unwrap().expr = Some(Expression { text: "time * 360".into(), enabled: true });
     p.comp_mut(cid).unwrap().layers.push(bar);
     let host = Expressions;
     let mut r = Renderer::new(&p, &NoFootage, RenderOpts { motion_blur: false, ..Default::default() });
@@ -1106,7 +1060,7 @@ fn hundred_wiggles_are_fast() {
     let cid = p.add_item("Comp", Label::Sandstone, None, ItemKind::Comp(comp.clone().into()));
     for i in 0..100 {
         let mut l = solid(&mut p, &comp, &format!("L{i}"), [1.0, 1.0, 1.0], 10, 10);
-        l.props.prop_mut(POS).unwrap().expr = Some(Expression { text: "wiggle(2, 50)".into(), enabled: true, ..Default::default() });
+        l.props.prop_mut(POS).unwrap().expr = Some(Expression { text: "wiggle(2, 50)".into(), enabled: true });
         p.comp_mut(cid).unwrap().layers.push(l);
     }
     let host = Expressions;
@@ -1170,7 +1124,7 @@ fn text_expression_selector_values() {
     assert_eq!(sel_of(&p), vec![0.25, 0.5, 0.75, 1.0]);
     let set_expr = |p: &mut Project, text: &str| {
         let l = p.comp_mut(cid).unwrap().layer_mut(lid).unwrap();
-        l.props.prop_mut("text/animators/#1/selectors/#2/amount").unwrap().expr = Some(Expression { text: text.into(), enabled: true, ..Default::default() });
+        l.props.prop_mut("text/animators/#1/selectors/#2/amount").unwrap().expr = Some(Expression { text: text.into(), enabled: true });
     };
     // Range selector covering the first half → selectorValue 0 for the second half.
     p.comp_mut(cid).unwrap().layer_mut(lid).unwrap().props.prop_mut("text/animators/#1/selectors/#1/end").unwrap().value = Value::Scalar(50.0);
@@ -1417,71 +1371,3 @@ fn time_to_frames_preserves_coercion_and_small_durations() {
 }
 
 mod property_group;
-
-#[test]
-fn cineon_reader_compatibility_handles_aliases_and_computed_names_without_rewriting() {
-    for source in ["const e = thisComp.layer('B').effect('C1'); e('Gamma') * 100", "const l = thisComp.layer('B'); l['ef' + 'fect']('C1')('Gam' + 'ma') * 100"]
-    {
-        let mut f = fx();
-        let spec = effectcraft_effects::find("ec.utility.cineon").unwrap();
-        let mut g = group_push(&mut f.p, |ids| effectcraft_effects::instantiate(spec, ids, "C1", [20.0, 20.0]));
-        g.get_mut("gamma").unwrap().value = Value::Scalar(1.0);
-        f.layer_mut(f.b).props.sub_mut("effects").unwrap().children.push(g.into());
-        f.set_expr(f.a, ROT, source);
-        let pr = f.layer_mut(f.a).props.prop_mut(ROT).unwrap();
-        effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(pr);
-        assert_eq!(pr.expr.as_ref().unwrap().text, source);
-        let got = f.ev(f.b, ROT, "thisComp.layer('A').transform.rotation", 0.0).unwrap();
-        assert!((got.as_f64() - 170.0).abs() < 1e-9, "{source}: {got:?}");
-    }
-}
-
-#[test]
-fn cineon_retained_expression_preserves_values_at_and_below_the_legacy_guard() {
-    for old in [0.01f64, 0.005, 0.0, -1.0] {
-        let mut f = fx();
-        f.set_expr(f.a, "effects/#1/slider", &old.to_string());
-        effectcraft_effects::migrate::scale_cineon_gamma(f.layer_mut(f.a).props.prop_mut("effects/#1/slider").unwrap());
-        let got = f.ev(f.b, ROT, "thisComp.layer('A').effect('Slider Control')('Slider')", 0.0).unwrap();
-        assert!((got.as_f64() - old / 1.7).abs() < 1e-12, "{old}: {got:?}");
-    }
-}
-
-#[test]
-fn retained_expressions_read_converted_essential_gamma_values_and_keys_on_the_old_scale() {
-    let mut f = fx();
-    let mut g = effectcraft_project::PropGroup::new(90001, "essential", "Essential Properties");
-    let mut pr = effectcraft_project::Property::new(90002, "eg90003", "Exposed Gamma", Value::Scalar(2.2 / 1.7));
-    pr.cineon_gamma_units = true;
-    pr.keys = vec![Keyframe::new(Tick::ZERO, Value::Scalar(2.2 / 1.7))];
-    g.children.push(pr.into());
-    f.layer_mut(f.b).props.children.push(g.into());
-    let source = "thisComp.layer('B').__group('essential').property('Exposed Gamma').valueAtTime(0) * 100";
-    f.set_expr(f.a, ROT, source);
-    effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(f.layer_mut(f.a).props.prop_mut(ROT).unwrap());
-    let old = f.ev(f.a, ROT, source, 0.0).unwrap().as_f64();
-    let indirect = f.ev(f.b, ROT, "thisComp.layer('A').transform.rotation", 0.0).unwrap().as_f64();
-    assert!((indirect - 220.0).abs() < 1e-9, "{indirect}");
-    assert!((old - 220.0).abs() < 1e-9, "{old}");
-    let current = f.ev(f.a, ROT, &format!("{source} + 0"), 0.0).unwrap().as_f64();
-    assert!((current - 220.0 / 1.7).abs() < 1e-9, "new expression reads current units: {current}");
-    let key_source = "thisComp.layer('B').__group('essential').property('Exposed Gamma').key(1).value * 100";
-    f.set_expr(f.a, ROT, key_source);
-    effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(f.layer_mut(f.a).props.prop_mut(ROT).unwrap());
-    let key = f.ev(f.b, ROT, "thisComp.layer('A').transform.rotation", 0.0).unwrap().as_f64();
-    assert!((key - 220.0).abs() < 1e-9, "{key}");
-    // Unsupported public Layer accessors retain their original error/fallback behavior.
-    for unsupported in
-        ["thisComp.layer('B').property('essential').property('Exposed Gamma') * 100", "thisComp.layer('B').essentialProperty('Exposed Gamma') * 100"]
-    {
-        f.set_expr(f.a, ROT, unsupported);
-        effectcraft_effects::migrate::read_cineon_gamma_on_old_scale(f.layer_mut(f.a).props.prop_mut(ROT).unwrap());
-        assert!(f.ev(f.a, ROT, unsupported, 0.0).is_err());
-        assert_eq!(f.ev(f.b, ROT, "thisComp.layer('A').transform.rotation", 0.0).unwrap().as_f64(), 0.0);
-    }
-    let own = "value + thisProperty.key(1).value";
-    f.set_expr(f.b, "essential/eg90003", own);
-    f.layer_mut(f.b).props.prop_mut("essential/eg90003").unwrap().expr.as_mut().unwrap().compat = Some(effectcraft_project::ExpressionCompat::CineonGamma);
-    let own_result = f.ev(f.b, "essential/eg90003", own, 0.0).unwrap().as_f64();
-    assert!((own_result - 4.4 / 1.7).abs() < 1e-9, "retained self and key reads convert once: {own_result}");
-}

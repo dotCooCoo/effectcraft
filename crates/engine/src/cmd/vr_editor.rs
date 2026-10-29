@@ -28,7 +28,7 @@ pub fn environments(p: &Project) -> Vec<VrEnv> {
     for (oid, oc) in p.comps() {
         for l in &oc.layers {
             let LayerSource::Comp { item: cube } = l.source else { continue };
-            let vr = l.effects().is_some_and(|fx| fx.groups().any(|g| matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == "ec.vr.converter")));
+            let vr = l.effects().is_some_and(|fx| fx.groups().any(|g| matches!(&g.kind, GroupKind::Effect { effect } if effect == "ec.vr.converter")));
             if !vr {
                 continue;
             }

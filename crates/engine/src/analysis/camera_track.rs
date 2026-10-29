@@ -112,7 +112,7 @@ struct CamWork {
 }
 
 pub(crate) fn is_tracker(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == ct::ID)
+    matches!(&g.kind, GroupKind::Effect { effect } if effect == ct::ID)
 }
 
 fn str_of(g: &PropGroup, m: &str) -> String {

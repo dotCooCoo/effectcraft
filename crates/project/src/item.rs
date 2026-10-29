@@ -295,25 +295,6 @@ impl Project {
     /// hostile file still opens, within bounds, and the user can be told what changed.
     pub fn from_json_repaired(s: &str) -> Result<(Project, Vec<String>), ProjectError> {
         let mut p: Project = serde_json::from_str(s).map_err(|e| ProjectError::Invalid(e.to_string()))?;
-        // A pre-release Cineon implementation briefly wrote schema 3 with unit Gamma.
-        // Preserve those files without making that temporary schema the current format.
-        if p.schema == 3 {
-            for item in p.items.values_mut() {
-                let ItemKind::Comp(c) = &mut item.kind else { continue };
-                for layer in &mut std::sync::Arc::make_mut(c).layers {
-                    let Some(effects) = layer.props.sub_mut("effects") else { continue };
-                    for node in &mut effects.children {
-                        if let crate::Node::Group(g) = node
-                            && let crate::GroupKind::Effect { effect, version } = &mut g.kind
-                            && effect == "ec.utility.cineon"
-                        {
-                            *version = (*version).max(1);
-                        }
-                    }
-                }
-            }
-            p.schema = SCHEMA_VERSION;
-        }
         if p.schema > SCHEMA_VERSION {
             return Err(ProjectError::Invalid(format!("project schema {} is newer than this version supports ({SCHEMA_VERSION})", p.schema)));
         }

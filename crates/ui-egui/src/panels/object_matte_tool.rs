@@ -124,5 +124,5 @@ fn existing(app: &EffectcraftApp, layer: &Layer) -> Option<u64> {
 }
 
 fn is_object_matte(g: &effectcraft_engine::project::PropGroup) -> bool {
-    matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect, .. } if effect == effectcraft_engine::effects::object_matte::ID)
+    matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect } if effect == effectcraft_engine::effects::object_matte::ID)
 }

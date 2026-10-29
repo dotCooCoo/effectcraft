@@ -1,12 +1,12 @@
 use super::item::{ItemId, LayerId};
 use super::{BTreeMap, ColorSpace, Deserialize, Label, Serialize, Tick};
 
-/// The project file schema. 2: effects on source-less layers measure positions from
-/// the top-left of comp-sized bounds (effect space), rather than the layer's origin.
-/// Individual effects version their own parameter semantics.
+/// The project file schema. 2: effects on layers without a source rectangle (shape, text)
+/// measure positions from the top-left of their comp-sized bounds (effect space), not from
+/// the layer's origin; projects from schema 1 are converted when opened (#227).
 pub const SCHEMA_VERSION: u32 = 2;
 
-/// The first schema in which effect positions are in effect space.
+/// The first schema in which effect positions are in effect space (see [`SCHEMA_VERSION`]).
 pub const SCHEMA_EFFECT_SPACE: u32 = 2;
 
 /// The EffectCraft version, written into project files as `savedBy`.

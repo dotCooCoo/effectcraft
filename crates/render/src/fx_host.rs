@@ -150,7 +150,7 @@ pub fn essential_overrides(ctx: &EvalCtx, layer: &Layer) -> Vec<effectcraft_proj
         if over.contains(&p.uid)
             && let Some(control) = essential::control_of(&p.match_id)
         {
-            out.push(essential::Override { control, value: ctx.value(layer, p), gamma_map: p.cineon_gamma_map.clone() });
+            out.push(essential::Override { control, value: ctx.value(layer, p) });
         }
     });
     out

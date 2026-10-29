@@ -350,7 +350,7 @@ fn node_json(c: &Comp, l: &Layer, uid: u64) -> R {
             o["canSetEnabled"] = json!(instance);
             o["instance"] = json!(instance || instance_parent);
             o["effectId"] = json!(match &g.kind {
-                GroupKind::Effect { effect, .. } => Some(effect.clone()),
+                GroupKind::Effect { effect } => Some(effect.clone()),
                 _ => None,
             });
             if let GroupKind::Mask { mode, inverted, color, locked, .. } = &g.kind {

@@ -133,7 +133,7 @@ pub fn signature(p: &Project, comp: ItemId, layer: &Layer) -> String {
 }
 
 fn is_warp(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == warp_stab::ID)
+    matches!(&g.kind, GroupKind::Effect { effect } if effect == warp_stab::ID)
 }
 
 fn str_of(g: &PropGroup, m: &str) -> String {

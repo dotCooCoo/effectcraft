@@ -121,20 +121,29 @@ their bottom-right quarter. Tracking data of effects that analyse footage (Warp 
 Camera Tracker, Mocha shape) is left as it is: footage has a source rectangle, whose effect space
 did not change.
 
-Cineon Converter effect version 1 uses Gamma 1 for linear output (formerly 1.7): Log to Linear
-raises the linear value to `1 / gamma`, rather than `1.7 / gamma`. The project schema stays at 2.
-Opening an unversioned Cineon instance divides saved Gamma values, keyframes and ease speeds by
-1.7 before adding missing defaults, and records the effect version. Essential Properties overrides
-that exclusively expose those older Gamma controls convert with them, including nested controls.
-Retained expressions keep their editable text byte-for-byte. Compatibility metadata makes their
-Gamma reads and results retain the saved scale, including when a disabled expression is enabled
-later. Expressions without possible property-reading roots, such as an unrelated wiggle, stay
-untouched. Editing expression source clears its compatibility metadata; toggling enabled or
-resubmitting identical text preserves it. The normal cached expression evaluation handles these
-flags without adding an eval-and-rewrite wrapper.
-Animation preset format version 2 stores unit Gamma. Version 1 presets use the same conversion,
-including a Gamma property saved alone. A pre-release schema-3 project opens with its unit Gamma
-kept and is normalized to schema 2; existing source wrappers from that pre-release stay intact.
+Cineon Converter has a hidden Version parameter (`version`). In version 2, Gamma 1 gives linear
+output: Log to Linear raises the linear value to `1 / gamma`. In version 1, Gamma 1.7 gives linear
+output: Log to Linear raises the linear value to `1.7 / gamma`. A new instance is version 2. An
+instance saved before the parameter existed opens as version 1 (`migrate::legacy_default`), with
+its Gamma, keyframes and expressions unchanged, and renders as it did. A whole Cineon Converter
+applied from an animation preset saved before the parameter existed is also version 1. Opening a
+project does not change any expression or the project schema.
+
+A project saved with the Version parameter opens in an earlier build, since its schema is still 2.
+That build keeps the Version parameter it does not know and reads every Gamma on version 1's
+scale. A version 1 instance renders there as it did before. A version 2 instance's Gamma is read
+there as a version 1 Gamma, so its default Gamma 1 renders darker than linear. Earlier builds
+apply format 2 animation presets the same way and ignore `cineonVersion`.
+
+Animation presets are format 2 (`effectcraftAnimationPreset: 2`). A saved property that is a
+Cineon Converter's Gamma records that instance's version in `cineonVersion`. So does an Essential
+Properties value whose control drives only Cineon Converter Gammas of one version, directly or
+through nested comps. The Gamma properties of a format 1 preset are version 1 Gammas. Applying a
+Gamma to a Cineon Converter on the layer sets that instance's Version to the recorded one.
+Applying it to an Essential Properties value converts the value, its keyframes and their speeds to
+the version of the Gammas that the control drives (dividing by 1.7 from version 1 to version 2).
+Expressions in a preset are applied as saved, and an Essential Properties Gamma with an enabled
+expression that was saved on another version is skipped.
 
 ## 4. Rendering
 

@@ -85,11 +85,3 @@ To beta (≈ 75% ready and `.aep` opening): **≈ 350–620 h**. To full parity:
 |---|---|---|
 | 2026-10-10 | minor | Alpha gate: six core workflows checked; all pass, stage stays alpha |
 | 2026-10-10 | major | New file: milestones from ROADMAP.md, current focus, next steps with estimates |
-
-2026-10-28: Cineon Converter compatibility is versioned per effect while the project stays at schema 2. Retained expressions keep their exact editable source, including while disabled; compatibility metadata preserves old Gamma reads and results. Shared Essential controls retain their public numbers while saved Gamma bindings convert separately, including nested instances and old animation presets; unrelated linked values keep their units. Pure unrelated wiggle expressions stay untouched. Scores and remaining estimates unchanged.
-
-2026-10-28 UI correction: On startup or an interface-language change, font menus receive glyph coverage for native and canonical labels from installed fonts. Language-preferred faces retain their order. Scores and remaining estimates unchanged.
-
-2026-10-28 rendering correction: Advanced3D GPU shadows follow the surface at each pixel center, including perspective and clipped geometry, so wide soft shadows stay aligned with CPU rendering. Scores and remaining estimates unchanged.
-
-2026-10-28: Chosen preset behavior: applying a version 1 preset to a mixed Essential control adopts retained shared units for that instance’s entire numeric output, including an existing expression. The expression text and its existing compatibility flags are preserved. This is an application rule, not a confirmed parity claim.

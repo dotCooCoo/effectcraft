@@ -104,7 +104,7 @@ fn footage_item(spec: &LargeSpec, i: usize) -> Footage {
 
 fn set_expr(l: &mut Layer, path: &str, text: &str) {
     if let Some(p) = l.props.prop_mut(path) {
-        p.expr = Some(Expression { text: text.into(), enabled: true, ..Default::default() });
+        p.expr = Some(Expression { text: text.into(), enabled: true });
     }
 }
 

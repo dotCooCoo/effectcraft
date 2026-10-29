@@ -422,22 +422,13 @@ fn install_script_fallbacks(family_fonts: &mut FontDefinitions, language: &str) 
         // A font covering one Han probe may be a sparse subset. Register additional faces
         // needed by the actual interface catalog instead of assuming whole-script coverage.
         let extra = if is_chinese(language) { crate::i18n::catalog_characters(language) } else { Vec::new() };
-        let mut extra: Vec<_> = extra.into_iter().filter(|ch| *ch >= '\u{2e80}').map(|ch| (ch, "catalog-system")).collect();
-        // Labels can use a different script from the interface language. Keep locale-priority
-        // faces first, then cover canonical and native family names shown by the font menu.
-        let mut label_chars = std::collections::BTreeSet::new();
-        for (family, _) in fonts::families() {
-            label_chars.extend(family.chars().filter(|ch| !ch.is_ascii() && !ch.is_control()));
-        }
-        for native in fonts::native_families().values() {
-            label_chars.extend(native.chars().filter(|ch| !ch.is_ascii() && !ch.is_control()));
-        }
-        extra.extend(label_chars.into_iter().map(|ch| (ch, "font-name-system")));
-        // Sparse fonts can cover a neighbor of a missing character in the same block.
-        let mut uncovered_chars = std::collections::HashSet::new();
+        let extra: Vec<_> = extra.into_iter().filter(|ch| *ch >= '\u{2e80}').map(|ch| (ch, "catalog-system")).collect();
+        // 256-character blocks where a catalog character found no face: with nothing installed
+        // covering them, each lookup would read every installed font file again.
+        let mut uncovered_blocks = std::collections::HashSet::new();
         for &(probe, name) in cjk.iter().chain(SCRIPT_PROBES).chain(std::iter::once(&HANGUL)).chain(&extra) {
-            let supplemental = matches!(name, "catalog-system" | "font-name-system");
-            if supplemental && (uncovered_chars.contains(&probe) || seen.iter().any(|&id| fonts::face(id).has_char(probe))) {
+            let catalog = name == "catalog-system";
+            if catalog && (uncovered_blocks.contains(&(probe as u32 >> 8)) || seen.iter().any(|&id| fonts::face(id).has_char(probe))) {
                 continue;
             }
             // The interface asks for the platform's UI face first; the order a composed frame
@@ -453,8 +444,8 @@ fn install_script_fallbacks(family_fonts: &mut FontDefinitions, language: &str) 
                 .unwrap_or_else(|| fonts::fallback_for_locale(probe, base, cjk_locale(language)));
             let face = fonts::face(id);
             if !face.has_char(probe) {
-                if supplemental {
-                    uncovered_chars.insert(probe);
+                if catalog {
+                    uncovered_blocks.insert(probe as u32 >> 8);
                 }
                 continue; // nothing installed covers this script
             }
@@ -466,7 +457,7 @@ fn install_script_fallbacks(family_fonts: &mut FontDefinitions, language: &str) 
             // Use the already-read, parsed bytes rather than reading a font file twice.
             let mut data = FontData::from_owned(font.data().as_bytes().to_vec());
             data.index = face.info.index;
-            let name = if supplemental { format!("{name}-{:x}", probe as u32) } else { name.to_string() };
+            let name = if name == "catalog-system" { format!("{name}-{:x}", probe as u32) } else { name.to_string() };
             family_fonts.font_data.insert(name.clone(), Arc::new(data));
             for family in family_fonts.families.values_mut() {
                 family.push(name.to_string());
@@ -602,106 +593,6 @@ pub fn apply_visuals(ctx: &egui::Context, t: &Tokens) {
 mod script_font_tests {
     use super::{SCRIPT_PROBES, interface_fallback_candidates};
     use effectcraft_text::fonts;
-
-    // Original generated triangle font: no installed script fonts are needed.
-    fn sparse_label_font(family: &str, character: u16) -> Vec<u8> {
-        fn u16s(v: &[u16]) -> Vec<u8> {
-            v.iter().flat_map(|x| x.to_be_bytes()).collect()
-        }
-        let delta_space = 1u16.wrapping_sub(0x20);
-        let cmap4 = {
-            let mut t = u16s(&[4, 0, 0, 6, 4, 1, 2]);
-            t.extend(u16s(&[0x20, character, 0xFFFF, 0, 0x20, character, 0xFFFF, delta_space, 2u16.wrapping_sub(character), 1, 0, 0, 0]));
-            let len = t.len() as u16;
-            t[2..4].copy_from_slice(&len.to_be_bytes());
-            t
-        };
-        let mut cmap = u16s(&[0, 1, 3, 1, 0, 12]);
-        cmap.extend(cmap4);
-        // glyph 2: one contour of three on-curve points (100,0) (500,0) (300,600)
-        let mut glyf = u16s(&[1, 100, 0, 500, 600, 2, 0]);
-        glyf.extend([1u8, 1, 1]);
-        glyf.extend(u16s(&[100, 400, (-200i16) as u16, 0, 0, 600]));
-        glyf.push(0);
-        let loca = u16s(&[0, 0, 0, (glyf.len() / 2) as u16]);
-        let mut head = u16s(&[1, 0, 1, 0, 0, 0, 0x5F0F, 0x3CF5, 0, 1000]);
-        head.extend([0u8; 16]);
-        head.extend(u16s(&[100, 0, 500, 600, 0, 8, 2, 0, 0]));
-        let mut hhea = u16s(&[1, 0, 800, (-200i16) as u16, 0, 600, 0, 0, 500, 1, 0, 0]);
-        hhea.extend([0u8; 8]);
-        hhea.extend(u16s(&[0, 3]));
-        let hmtx = u16s(&[600, 0, 600, 0, 600, 0]);
-        let maxp = u16s(&[1, 0, 3, 3, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0]);
-        let strings: Vec<Vec<u8>> = [family, "Regular"].iter().map(|s| s.encode_utf16().flat_map(|u| u.to_be_bytes()).collect()).collect();
-        let mut name = u16s(&[0, 2, 30]);
-        let mut off = 0;
-        for (id, st) in strings.iter().enumerate() {
-            name.extend(u16s(&[3, 1, 0x409, id as u16 + 1, st.len() as u16, off]));
-            off += st.len() as u16;
-        }
-        strings.iter().for_each(|st| name.extend(st));
-        let tables: [(&[u8; 4], Vec<u8>); 8] =
-            [(b"cmap", cmap), (b"glyf", glyf), (b"head", head), (b"hhea", hhea), (b"hmtx", hmtx), (b"loca", loca), (b"maxp", maxp), (b"name", name)];
-        let mut out = u16s(&[1, 0, tables.len() as u16, 128, 3, 0]);
-        let mut offset = 12 + 16 * tables.len();
-        let mut body = vec![];
-        for (tag, data) in &tables {
-            out.extend(*tag);
-            out.extend([0u8; 4]);
-            out.extend((offset as u32).to_be_bytes());
-            out.extend((data.len() as u32).to_be_bytes());
-            let padded = data.len().div_ceil(4) * 4;
-            body.extend(data);
-            body.resize(body.len() + padded - data.len(), 0);
-            offset += padded;
-        }
-        out.extend(body);
-        out
-    }
-
-    #[test]
-    fn english_ui_covers_native_and_canonical_font_labels_with_sparse_faces() {
-        const ISOLATED: &str = "EFFECTCRAFT_TEST_ISOLATED_UI_FONT_LABELS";
-        if std::env::var_os(ISOLATED).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
-                .args(["--exact", "theme::script_font_tests::english_ui_covers_native_and_canonical_font_labels_with_sparse_faces", "--nocapture"])
-                .env(ISOLATED, "1")
-                .output()
-                .expect("isolated font-label test");
-            assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-            return;
-        }
-        struct Labels(Vec<fonts::FaceInfo>);
-        impl fonts::FontSource for Labels {
-            fn faces(&self) -> Vec<fonts::FaceInfo> {
-                self.0.clone()
-            }
-        }
-        // Noncharacters avoid incidental host coverage. The missing neighbor must not suppress
-        // either covered character in the same block. Each visible character needs its own face.
-        let make = |family: String, native_family, character| fonts::FaceInfo {
-            data: fonts::FaceData::Shared(std::sync::Arc::new(sparse_label_font(&family, character))),
-            full_name: family.clone(),
-            family,
-            native_family,
-            style: "Regular".into(),
-            weight: 400,
-            italic: false,
-            index: 0,
-            origin: "test",
-            postscript: None,
-            variable: false,
-            instances: Vec::new(),
-        };
-        assert_eq!(
-            fonts::add_source(&Labels(vec![
-                make("EffectCraft Sparse Native".into(), Some("Native \u{fdd0}\u{fdd1}".into()), 0xfdd1),
-                make("EffectCraft Sparse Canonical \u{fdd2}".into(), None, 0xfdd2),
-            ])),
-            2
-        );
-        assert_drawn("en", "\u{fdd1}\u{fdd2}");
-    }
 
     /// Whether an installed face covers `probe` (else the glyph check is skipped).
     fn installed(probe: char) -> bool {

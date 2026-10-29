@@ -344,7 +344,7 @@ fn find_missing(s: &mut Session, p: &Value) -> Result<Value> {
             for (cid, c) in s.project.comps() {
                 for l in &c.layers {
                     for g in l.effects().into_iter().flat_map(|fx| fx.groups()) {
-                        if let effectcraft_project::GroupKind::Effect { effect, .. } = &g.kind
+                        if let effectcraft_project::GroupKind::Effect { effect } = &g.kind
                             && crate::effects::find(effect).is_none()
                         {
                             found.push(json!({"comp": cid.0, "layer": l.id.0, "effect": effect}));

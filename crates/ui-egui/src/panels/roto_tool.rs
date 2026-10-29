@@ -14,7 +14,7 @@ use crate::{EffectcraftApp, widgets};
 
 /// Position of the layer's first Roto Brush & Refine Edge effect.
 pub fn roto_index(layer: &Layer) -> Option<usize> {
-    layer.effects()?.groups().position(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect, .. } if effect == fx::ID))
+    layer.effects()?.groups().position(|g| matches!(&g.kind, effectcraft_engine::project::GroupKind::Effect { effect } if effect == fx::ID))
 }
 
 fn roto_group(layer: &Layer) -> Option<&effectcraft_engine::project::PropGroup> {

@@ -318,8 +318,7 @@ fn pack(s: &Scene) -> [Vec<u8>; 7] {
     let e = s.env.unwrap_or(effectcraft_render::three_d::adv::EnvInfo { radiance: 0, mips: 1, irradiance: 0, intensity: 0.0, rotation: 0.0 });
     globals.extend([e.radiance as f32, e.mips as f32, e.irradiance as f32, e.intensity]);
     let lit = !(s.lights.is_empty() && s.env.is_none() && s.ambient == [0.0; 3]);
-    let flags = (lit as u32) | ((!s.shadows.is_empty() as u32) << 1);
-    globals.extend([e.rotation, flags as f32, s.width as f32, s.height as f32]);
+    globals.extend([e.rotation, lit as u32 as f32, 0.0, 0.0]);
     let mats = s.materials.iter().flat_map(|m| {
         let flags = (m.double_sided as u32)
             | (m.unlit as u32) << 1

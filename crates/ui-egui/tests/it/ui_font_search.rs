@@ -50,13 +50,6 @@ fn font_search_filters_selects_and_undoes_in_both_panels() {
             (field.rect[1] + field.rect[3] / 2.0 - search.rect[1] - search.rect[3] / 2.0).abs() < 1.0,
             "font selection and search must occupy the same row"
         );
-        // Optional manual capture uses this same gate-built harness for native family labels.
-        if let (Ok(dir), Ok(query)) = (std::env::var("EC_SNAPSHOT_DIR"), std::env::var("EC_FONT_SNAPSHOT_QUERY")) {
-            type_text(&mut h, &query);
-            h.render().unwrap().save(format!("{dir}/{prefix}-native-labels.png")).unwrap();
-            key(&mut h, Key::Escape);
-            click(&mut h, prefix);
-        }
         // Search gets focus on open. Mixed case and surrounding whitespace are accepted.
         type_text(&mut h, "  jEtBrAiNs  ");
         let rows = h.state().auto.query(&format!("{prefix}.option."));

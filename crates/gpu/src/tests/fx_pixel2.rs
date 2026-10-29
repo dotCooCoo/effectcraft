@@ -166,20 +166,6 @@ fn blurs() {
 }
 
 #[test]
-fn cineon_legacy_gamma_guard_gpu_matches_cpu_near_white() {
-    for conversion in [0, 1] {
-        for gamma in [0.01 / 1.7, 0.0] {
-            let mut scene = Scene::new(BitDepth::Bpc32);
-            let sample = if conversion == 1 { 684.5f32 / 1023.0 } else { 0.75 };
-            let mut layer = scene.solid([sample; 3], 32, 32);
-            scene.effect(&mut layer, "ec.utility.cineon", &[("conversionType", e(conversion)), ("gamma", n(gamma)), ("highlightRolloff", n(0.0))]);
-            scene.push(layer);
-            check("Cineon Gamma guard", compare_at(&scene, opts(), Tick::ZERO), 0.0);
-        }
-    }
-}
-
-#[test]
 fn composites_and_colour() {
     for m in [0, 1, 2, 3, 5, 8, 11, 14, 15] {
         effect_case("ec.channel.cccomposite", &[("compositeOriginal", e(m)), ("opacity", n(70.0))]);
@@ -193,6 +179,8 @@ fn composites_and_colour() {
     env_case("ec.color.colorlink", &[("sourceLayer", Value::Layer(Some(9))), ("sampleSource", e(4)), ("clip", n(5.0))]);
     effect_case("ec.utility.cineon", &[]);
     effect_case("ec.utility.cineon", &[("conversionType", e(0)), ("gamma", n(2.2))]);
+    effect_case("ec.utility.cineon", &[("version", n(1.0)), ("gamma", n(2.2))]);
+    effect_case("ec.utility.cineon", &[("version", n(1.0)), ("gamma", n(0.0)), ("conversionType", e(0))]);
     effect_case("ec.utility.cineon", &[("conversionType", e(2)), ("highlightRolloff", n(60.0)), ("tenBitWhitePoint", n(800.0))]);
     effect_case("ec.utility.hdrcompander", &[("gain", n(4.0)), ("gamma", n(2.0))]);
     effect_case("ec.utility.hdrcompander", &[("mode", e(1)), ("gain", n(3.0)), ("gamma", n(1.5))]);

@@ -324,7 +324,7 @@ fn probe_frame(ctx: &effectcraft_render::EvalCtx, layer: &Layer, pos: usize) -> 
     let effectcraft_project::LayerSource::Footage { item } = layer.source else { return comp };
     let Some(effectcraft_project::ItemKind::Footage(f)) = ctx.project.item(item).map(|i| &i.kind) else { return comp };
     let fx = layer.effects().into_iter().flat_map(|fx| fx.groups().take(pos + 1));
-    let time_fx = |g: &PropGroup| matches!(&g.kind, GroupKind::Effect { effect, .. } if effect.starts_with("ec.time."));
+    let time_fx = |g: &PropGroup| matches!(&g.kind, GroupKind::Effect { effect } if effect.starts_with("ec.time."));
     let still = f.kind == effectcraft_project::FootageKind::Still;
     let blend = !still && ctx.comp.enable_frame_blending && layer.switches.frame_blend != effectcraft_project::FrameBlend::Off;
     // The Cryptomatte effect's own Selection isn't read by the probe: animated, it keeps it.
@@ -884,7 +884,7 @@ fn reset(s: &mut Session, p: &Value) -> Result<Value> {
     let lt = layer.layer_time(s.time());
     let g = layer.effects().and_then(|fx| fx.groups().find(|g| g.uid == uid)).ok_or_else(|| bad("effect.reset", "gone"))?;
     let spec = match &g.kind {
-        GroupKind::Effect { effect, .. } => effectcraft_effects::find(effect),
+        GroupKind::Effect { effect } => effectcraft_effects::find(effect),
         _ => None,
     }
     .ok_or_else(|| bad("effect.reset", "unknown effect"))?;

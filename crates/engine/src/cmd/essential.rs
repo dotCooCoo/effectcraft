@@ -148,7 +148,7 @@ fn add_property(s: &mut Session, p: &Value) -> Result<Value> {
         for (k, (cid, kind, name, as_type)) in added.iter().enumerate() {
             let id = proj.alloc();
             let eg = eg_of(proj, *cid)?;
-            let ctl = EgControl { id, name: name.clone(), kind: kind.clone(), as_type: *as_type, legacy_gamma_targets: vec![], cineon_gamma_units: false };
+            let ctl = EgControl { id, name: name.clone(), kind: kind.clone(), as_type: *as_type };
             insert(eg, ctl, group, index.map(|i| i + k), C)?;
             ids.push(id);
         }
@@ -171,13 +171,7 @@ fn add_mirror(s: &mut Session, p: &Value) -> Result<Value> {
     let index = p.get("index").and_then(Value::as_u64).map(|i| i as usize);
     let id = s.edit("Add Mirror to Essential Graphics", None, |proj, _| {
         let id = proj.alloc();
-        insert(
-            eg_of(proj, cid)?,
-            EgControl { id, name, kind: EgKind::Mirror { of }, as_type: None, legacy_gamma_targets: vec![], cineon_gamma_units: false },
-            group,
-            index,
-            C,
-        )?;
+        insert(eg_of(proj, cid)?, EgControl { id, name, kind: EgKind::Mirror { of }, as_type: None }, group, index, C)?;
         Ok(id)
     })?;
     Ok(json!({"control": id, "of": of}))
@@ -303,13 +297,7 @@ fn add_media(s: &mut Session, p: &Value) -> Result<Value> {
         if eg.flat().iter().any(|c| matches!(c.kind, EgKind::Media { layer } if layer == lid)) {
             return Err(bad(C, "this layer already has a Media Replacement control"));
         }
-        insert(
-            eg,
-            EgControl { id, name, kind: EgKind::Media { layer: lid }, as_type: None, legacy_gamma_targets: vec![], cineon_gamma_units: false },
-            group,
-            None,
-            C,
-        )?;
+        insert(eg, EgControl { id, name, kind: EgKind::Media { layer: lid }, as_type: None }, group, None, C)?;
         Ok(id)
     })?;
     Ok(json!({"control": id}))
@@ -322,13 +310,7 @@ fn add_group(s: &mut Session, p: &Value) -> Result<Value> {
     let id = s.edit("Add Essential Graphics Group", None, |proj, st| {
         st.essential_primary.get_or_insert(cid);
         let id = proj.alloc();
-        insert(
-            eg_of(proj, cid)?,
-            EgControl { id, name, kind: EgKind::Group { children: vec![] }, as_type: None, legacy_gamma_targets: vec![], cineon_gamma_units: false },
-            None,
-            index,
-            "essential.addGroup",
-        )?;
+        insert(eg_of(proj, cid)?, EgControl { id, name, kind: EgKind::Group { children: vec![] }, as_type: None }, None, index, "essential.addGroup")?;
         Ok(id)
     })?;
     Ok(json!({"control": id}))
@@ -343,7 +325,7 @@ fn add_comment(s: &mut Session, p: &Value) -> Result<Value> {
         let id = proj.alloc();
         insert(
             eg_of(proj, cid)?,
-            EgControl { id, name: "Comment".into(), kind: EgKind::Comment { text }, as_type: None, legacy_gamma_targets: vec![], cineon_gamma_units: false },
+            EgControl { id, name: "Comment".into(), kind: EgKind::Comment { text }, as_type: None },
             group,
             None,
             "essential.addComment",
@@ -421,7 +403,7 @@ fn edit_dropdown(s: &mut Session, p: &Value) -> Result<Value> {
         // The first Dropdown Menu Control of the layer.
         let (cid, lid) = layer_p(s, p, C)?;
         let l = s.project.comp(cid).and_then(|c| c.layer(lid)).ok_or(EngineError::NoComp)?;
-        let fx = l.effects().and_then(|fx| fx.groups().find(|g| matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == "ec.control.dropdown")));
+        let fx = l.effects().and_then(|fx| fx.groups().find(|g| matches!(&g.kind, GroupKind::Effect { effect } if effect == "ec.control.dropdown")));
         let uid = fx.and_then(|g| g.get("menu")).map(|pr| pr.uid).ok_or_else(|| bad(C, "the layer has no Dropdown Menu Control"))?;
         let mut q = p.clone();
         q["prop"] = json!(uid);
@@ -523,7 +505,7 @@ fn control_json(project: &Project, cid: ItemId, c: &EgControl) -> Value {
                 "layerName": src.map(|(l, _)| l.name.clone()),
                 "path": src.and_then(|(l, _)| super::match_path_of(&l.props, *prop)),
                 "type": src.and_then(|(_, pr)| essential::effective_type(c, pr)),
-                "value": src.map(|(l, pr)| { let mut v = pr.value_at(Tick::ZERO); essential::gamma::scale_value(&mut v, 1.0 / essential::gamma::factor(c,l.id,pr.uid)); value_json(essential::effective_type(c, pr), &v) }),
+                "value": src.map(|(_, pr)| value_json(essential::effective_type(c, pr), &pr.value_at(Tick::ZERO))),
                 "missing": src.is_none(),
                 "links": links,
                 "mirrors": project.comp(cid).and_then(|c| c.essential.as_ref()).map(|e| e.mirrors_of(c.id)).unwrap_or_default(),
@@ -541,7 +523,7 @@ fn control_json(project: &Project, cid: ItemId, c: &EgControl) -> Value {
                 "layerName": src.map(|(l, _)| l.name.clone()),
                 "path": src.and_then(|(l, pr)| super::match_path_of(&l.props, pr.uid)),
                 "type": src.and_then(|(_, pr)| ty(pr)),
-                "value": src.map(|(l, pr)| { let mut v = pr.value_at(Tick::ZERO); if let Some(master) = &master { essential::gamma::scale_value(&mut v, 1.0 / essential::gamma::factor(master,l.id,pr.uid)); } value_json(ty(pr), &v) }),
+                "value": src.map(|(_, pr)| value_json(ty(pr), &pr.value_at(Tick::ZERO))),
                 "missing": src.is_none(),
             })
         }
@@ -736,17 +718,11 @@ fn push_to_comp(s: &mut Session, p: &Value) -> Result<Value> {
     for (control, uid) in &ts {
         // A mirror pushes into its master's properties.
         let (Some(ctl), Some(pr)) = (eg.resolve(*control), l.props.find(*uid)) else { continue };
-        writes.push((ctl.clone(), pr.clone(), ctl.as_type));
+        writes.push((ctl.kind.clone(), pr.clone(), ctl.as_type));
     }
     s.edit("Push Override Values to Source", None, |proj, _| {
-        for (ctl, pr, _) in &writes {
-            if let Some(binding) = &pr.cineon_gamma_map {
-                essential::gamma::adopt_source_policy(proj, src, ctl.id, binding, pr.cineon_gamma_units);
-            }
-        }
         let sc = proj.comp_mut(src).ok_or(EngineError::NoComp)?;
-        for (ctl, pr, as_type) in &writes {
-            let kind = &ctl.kind;
+        for (kind, pr, as_type) in &writes {
             match kind {
                 // A Font control writes only the font (the source keeps its text and keys).
                 EgKind::Property { layer, prop, .. } if *as_type == Some(ControlType::Font) => {
@@ -760,8 +736,6 @@ fn push_to_comp(s: &mut Session, p: &Value) -> Result<Value> {
                 EgKind::Property { .. } => {
                     for (layer, prop) in kind.targets() {
                         let Some(inner) = sc.layer_mut(layer) else { continue };
-                        let units = essential::gamma::target_units(ctl, src, layer, prop, pr);
-                        let pr = essential::gamma::to_target(ctl, src, layer, prop, pr);
                         // Instance keys are in the precomp layer's time (= the source comp's
                         // time); the source property's keys are in the inner layer's time.
                         let keys: Vec<_> = pr
@@ -776,12 +750,6 @@ fn push_to_comp(s: &mut Session, p: &Value) -> Result<Value> {
                         if let Some(target) = inner.props.find_mut(prop) {
                             target.value = pr.value.clone();
                             target.keys = keys;
-                            target.cineon_gamma_map = pr.cineon_gamma_map.clone();
-                            if essential::control_of(&target.match_id).is_some()
-                                && let Some(units) = units
-                            {
-                                target.cineon_gamma_units = units;
-                            }
                         }
                     }
                 }

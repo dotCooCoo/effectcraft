@@ -450,7 +450,7 @@ fn copy_links(s: &mut Session, p: &Value, relative: bool) -> Result<Value> {
             }
             for uid in uids {
                 if let (Some(e), Some(pr)) = (link_expression(s, l.id, uid, relative), copy.props.find_mut(uid)) {
-                    pr.expr = Some(Expression { text: e, enabled: true, ..Default::default() });
+                    pr.expr = Some(Expression { text: e, enabled: true });
                 }
             }
             layers.push(copy);
@@ -502,7 +502,7 @@ fn paste_links(s: &mut Session, clip: LinkClip) -> Result<Value> {
         return Err(EngineError::Other("select a layer to paste into".into()));
     }
     let pairs: Vec<(String, Expression)> = match clip {
-        LinkClip::Links { links, .. } => links.into_iter().map(|(p, e)| (p, Expression { text: e, enabled: true, ..Default::default() })).collect(),
+        LinkClip::Links { links, .. } => links.into_iter().map(|(p, e)| (p, Expression { text: e, enabled: true })).collect(),
         LinkClip::Expressions(v) => v,
     };
     let n = s.edit("Paste", None, |proj, _| {

@@ -161,6 +161,10 @@ pub fn legacy_default(effect: &str, param: &str) -> Option<Value> {
         ("ec.key.advancedspill", "ultraSettings/tolerance") => Value::Scalar(100.0),
         // Transition: Block Dissolve's blocks had hard edges.
         ("ec.transition.blockdissolve", "softEdges") => Value::Bool(false),
+        // Utility: Cineon Converter version 1, where Gamma 1.7 gave linear output
+        // (`crate::utility::cineon_gamma`). Its default Gamma was 1.7.
+        ("ec.utility.cineon", "version") => Value::Scalar(1.0),
+        ("ec.utility.cineon", "gamma") => Value::Scalar(crate::utility::CINEON_V1_LINEAR_GAMMA),
         _ => return None,
     })
 }
@@ -255,7 +259,6 @@ fn is_numeric_ui(u: &ParamUi) -> bool {
 /// point defaults of added parameters. Returns whether anything changed.
 pub fn upgrade_instance(spec: &EffectSpec, g: &mut PropGroup, ids: &mut Ids, layer_size: [f64; 2]) -> bool {
     let before = g.clone();
-    cineon_gamma_to_unit_scale(spec.id, g);
     // Card Wipe's Back Layer was a None / Self popup; it is a layer parameter now, with "Self"
     // kept in the hidden Back Layer Is Self switch.
     let mut back_self = None;
@@ -457,94 +460,6 @@ fn shift_value(v: &mut Value, kind: Data, d: [f64; 2]) {
 fn same_point(a: &Value, b: &Value) -> bool {
     let (a, b) = (a.components(), b.components());
     a.len() == b.len() && a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-6)
-}
-
-/// The old Gamma value that produced linear output.
-pub const CINEON_LEGACY_GAMMA: f64 = 1.7;
-
-/// Parameter semantics of a newly instantiated effect. Other effects retain version zero.
-pub fn current_version(effect: &str) -> u32 {
-    u32::from(effect == "ec.utility.cineon")
-}
-
-/// Convert only a saved, unversioned Cineon instance. Called before missing defaults are added.
-pub fn cineon_gamma_to_unit_scale(effect: &str, g: &mut PropGroup) {
-    if effect != "ec.utility.cineon" {
-        return;
-    }
-    let version = match &g.kind {
-        effectcraft_project::GroupKind::Effect { version, .. } => *version,
-        _ => return,
-    };
-    if version >= current_version(effect) {
-        return;
-    }
-    if let Some(pr) = g.get_mut("gamma") {
-        scale_cineon_gamma(pr);
-    }
-    if let effectcraft_project::GroupKind::Effect { version, .. } = &mut g.kind {
-        *version = current_version(effect);
-    }
-}
-
-/// Version-one presets that saved a Gamma property alone use the same conversion.
-/// Retained expression text is never rewritten, including while disabled.
-pub fn scale_cineon_gamma(pr: &mut Property) {
-    if let Some(expr) = pr.expr.as_mut().filter(|e| !e.text.trim().is_empty()) {
-        expr.compat = Some(effectcraft_project::ExpressionCompat::CineonGamma);
-    }
-    let scale = |v: &mut Value| {
-        if let Value::Scalar(x) = v {
-            *x /= CINEON_LEGACY_GAMMA;
-        }
-    };
-    scale(&mut pr.value);
-    for key in &mut pr.keys {
-        scale(&mut key.value);
-        for ease in key.in_ease.iter_mut().chain(&mut key.out_ease) {
-            ease.speed /= CINEON_LEGACY_GAMMA;
-        }
-    }
-}
-
-/// Conservative possible-reader check: aliases and computed names still begin with a host
-/// root or dynamic-code entry point. False positives keep their text and incur no extra eval.
-pub fn may_read_cineon_gamma(text: &str) -> bool {
-    text.contains("\\u")
-        || text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$')).any(|word| {
-            matches!(
-                word,
-                "thisLayer"
-                    | "thisComp"
-                    | "comp"
-                    | "layer"
-                    | "effect"
-                    | "property"
-                    | "thisProperty"
-                    | "propertyGroup"
-                    | "parent"
-                    | "content"
-                    | "essentialProperty"
-                    | "eval"
-                    | "Function"
-                    | "constructor"
-                    | "this"
-                    | "globalThis"
-                    | "window"
-                    | "self"
-                    | "__h"
-            )
-        })
-}
-
-/// Mark possible readers only; unrelated expressions and all editable source text stay intact.
-pub fn read_cineon_gamma_on_old_scale(pr: &mut Property) {
-    if let Some(expr) = pr.expr.as_mut()
-        && expr.compat.is_none()
-        && may_read_cineon_gamma(&expr.text)
-    {
-        expr.compat = Some(effectcraft_project::ExpressionCompat::CineonGammaReader);
-    }
 }
 
 #[cfg(test)]
@@ -841,21 +756,28 @@ not a stroke",
     }
 
     #[test]
-    fn cineon_gamma_without_an_active_expression_scales_its_value() {
+    fn cineon_converter_saved_before_its_version_upgrades_to_version_1() {
         let spec = find("ec.utility.cineon").unwrap();
-        for (text, enabled) in [(" \n", true), ("2", false)] {
-            let mut next = 1;
-            let mut g = instantiate(spec, &mut Ids(&mut next), "Cineon Converter", [100.0, 50.0]);
-            let gamma = g.get_mut("gamma").unwrap();
-            gamma.value = Value::Scalar(1.7);
-            gamma.expr = Some(effectcraft_project::Expression { text: text.into(), enabled, ..Default::default() });
-            if let effectcraft_project::GroupKind::Effect { version, .. } = &mut g.kind {
-                *version = 0;
-            }
-            cineon_gamma_to_unit_scale(spec.id, &mut g);
-            let gamma = g.get_mut("gamma").unwrap();
-            assert_eq!(gamma.value, Value::Scalar(1.0), "{text:?}");
-            assert_eq!(gamma.expr.as_ref().map(|e| e.text.as_str()), Some(text));
-        }
+        let mut next = 1;
+        let fresh = instantiate(spec, &mut Ids(&mut next), "Cineon Converter", [100.0, 50.0]);
+        assert_eq!(fresh.get("version").unwrap().value, Value::Scalar(2.0));
+        assert_eq!(fresh.get("gamma").unwrap().value, Value::Scalar(1.0));
+        // Gamma, its keyframes and its expression are kept as saved.
+        let mut g = fresh.clone();
+        take_prop(&mut g, "version");
+        let gamma = g.get_mut("gamma").unwrap();
+        gamma.value = Value::Scalar(2.2);
+        gamma.keys = vec![effectcraft_keyframe::Keyframe::new(Default::default(), Value::Scalar(3.4))];
+        gamma.expr = Some(effectcraft_project::Expression { text: "value * 2".into(), enabled: true });
+        let saved = gamma.clone();
+        assert!(upgrade_instance(spec, &mut g, &mut Ids(&mut next), [100.0, 50.0]));
+        assert_eq!(g.get("version").unwrap().value, Value::Scalar(1.0));
+        assert_eq!(g.get("gamma"), Some(&saved));
+        // Saved without Gamma too: it takes version 1's default, which gave linear output.
+        let mut g = fresh.clone();
+        take_prop(&mut g, "version");
+        take_prop(&mut g, "gamma");
+        assert!(upgrade_instance(spec, &mut g, &mut Ids(&mut next), [100.0, 50.0]));
+        assert_eq!(g.get("gamma").unwrap().value, Value::Scalar(1.7));
     }
 }
