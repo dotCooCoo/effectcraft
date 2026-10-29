@@ -1,8 +1,8 @@
 use super::item::{ItemId, LayerId};
 use super::{BTreeMap, ColorSpace, Deserialize, Label, Serialize, Tick};
 
-/// The project file schema. 2: effects on source-less layers measure positions from
-/// the top-left of comp-sized bounds (effect space), rather than the layer's origin.
+/// The project file schema. 2: source-less layers measure effect positions from the
+/// top-left of comp-sized bounds; schema 1 projects are converted when opened (#227).
 /// Individual effects version their own parameter semantics.
 pub const SCHEMA_VERSION: u32 = 2;
 

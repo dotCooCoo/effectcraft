@@ -625,7 +625,7 @@ fn opening_an_old_project_upgrades_effect_instances() {
 /// its origin. Opening converts them to effect space so points that were set keep their place
 /// in the comp; points at their default become the layer centre; layers with a source
 /// rectangle, adjustment layers (their effects see the comp below as it is) and expression
-/// controls keep their values. Saving writes the current schema, and opening that again changes nothing.
+/// controls keep their values. Saving writes schema 2, and opening that again changes nothing.
 #[test]
 fn opening_a_schema_1_project_moves_shape_layer_effect_points_into_effect_space() {
     let mut s = Session::default();
@@ -656,7 +656,7 @@ fn opening_a_schema_1_project_moves_shape_layer_effect_points_into_effect_space(
     set(&mut s, adjust, on_adjust, "center", [40.0, 30.0]);
     assert_eq!(point(&s, shape, bulge, "center"), KV::Vec2([100.0, 50.0]), "Bulge's default centre");
 
-    let old = s.project.to_file_json().unwrap().replacen(&format!("\"schema\": {}", effectcraft_project::SCHEMA_VERSION), "\"schema\": 1", 1);
+    let old = s.project.to_file_json().unwrap().replacen("\"schema\": 2", "\"schema\": 1", 1);
     assert!(old.contains("\"schema\": 1"));
     let dir = std::env::temp_dir().join(format!("ec-effect-space-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -673,7 +673,7 @@ fn opening_a_schema_1_project_moves_shape_layer_effect_points_into_effect_space(
         assert_eq!(point(s2, adjust, on_adjust, "center"), KV::Vec2([40.0, 30.0]), "an adjustment layer's effects see the comp");
     };
     check(&s2);
-    // Saved with the current schema and opened again: nothing moves twice.
+    // Saved as schema 2 and opened again: nothing moves twice.
     s2.execute("file.save", json!({"path": path})).unwrap();
     let mut s3 = Session::default();
     s3.execute("file.open", json!({"path": path})).unwrap();
