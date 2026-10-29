@@ -224,18 +224,18 @@ pub fn viewer_hook(
             for g in fx.groups().filter(|g| g.enabled && effect_active(g, layer.id, &sel)) {
                 // Puppet owns its pin handles and hit testing. Generic crosshairs would
                 // overlap the pins and steal their selection/rotation/scale gestures.
-                if matches!(&g.kind, GroupKind::Effect { effect } if effect == effectcraft_engine::effects::puppet::ID) {
+                if matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == effectcraft_engine::effects::puppet::ID) {
                     continue;
                 }
                 if !picking
                     && app.ui.viewer.show_layer_controls
-                    && matches!(&g.kind, GroupKind::Effect { effect } if effect == crate::panels::fx_editors::RESHAPE)
+                    && matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == crate::panels::fx_editors::RESHAPE)
                 {
                     crate::panels::fx_editors::reshape_overlay(app, ui, painter, map, ectx, layer, g, &m, &mut actions);
                 }
                 if !picking
                     && app.ui.viewer.show_layer_controls
-                    && matches!(&g.kind, GroupKind::Effect { effect } if effect == crate::panels::fx_editors::MESH_WARP)
+                    && matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == crate::panels::fx_editors::MESH_WARP)
                 {
                     crate::panels::fx_editors::mesh_warp_overlay(app, ui, painter, map, ectx, layer, g, &fm, &mut actions);
                 }
@@ -259,7 +259,7 @@ pub fn viewer_hook(
                     })
                     .collect();
                 // Gradient Ramp and friends: a guide between start and end points.
-                if screen.len() == 2 && matches!(&g.kind, GroupKind::Effect { effect } if effect.contains("gradient") || effect.contains("ramp")) {
+                if screen.len() == 2 && matches!(&g.kind, GroupKind::Effect { effect, .. } if effect.contains("gradient") || effect.contains("ramp")) {
                     painter.line_segment([screen[0], screen[1]], Stroke::new(1.0, Color32::from_white_alpha(110)));
                 }
                 for (pr, s) in pts.iter().zip(screen) {

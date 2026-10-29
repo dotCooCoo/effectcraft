@@ -160,7 +160,7 @@ pub fn next_pin_name(fx: &PropGroup, kind: PinKind) -> String {
 
 /// Is `g` a Puppet effect instance?
 pub fn is_puppet(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect } if effect == ID)
+    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == ID)
 }
 
 /// A pin evaluated at the render time.

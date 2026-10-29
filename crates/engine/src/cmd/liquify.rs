@@ -18,7 +18,7 @@ use crate::{EngineError, Result, Session, cmd};
 const ID: &str = "ec.distort.liquify";
 
 fn is_liquify(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect } if effect == ID)
+    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == ID)
 }
 
 fn liquify_effect(fx: &mut PropGroup, ids: &mut Ids, layer_size: [f64; 2], want: Option<Uid>) -> Result<Uid> {

@@ -64,7 +64,7 @@ fn font_and_scale_controls_override_per_instance() {
         let mut v = vec![];
         g.walk("", &mut |_, p| {
             if let Some(c) = essential::control_of(&p.match_id) {
-                v.push(essential::Override { control: c, value: p.value.clone() });
+                v.push(essential::Override { control: c, value: p.value.clone(), gamma_map: p.cineon_gamma_map.clone() });
             }
         });
         v

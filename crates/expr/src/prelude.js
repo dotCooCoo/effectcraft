@@ -24,7 +24,7 @@ var __gammaScale = 1;
 var __COMP = 0, __COMPNAME = 1, __LAYER = 2, __LINFO = 3, __CHILD = 4, __PINFO = 5, __VALUE = 6, __XFORM = 7, __RECT = 8, __MARKERS = 9, __DOC = 10;
 var __FOOT = 11, __FDATA = 12, __SAMPLE = 13, __PROJ = 14, __SOURCE = 15, __ANCESTOR = 16;
 
-function __begin(t, v, c, l, path, uid, idx, fd, ti, tt, sv) {
+function __begin(t, v, c, l, path, uid, idx, fd, ti, tt, sv, ownScale, gammaScale) {
   time = t;
   value = v;
   textIndex = ti;
@@ -35,8 +35,9 @@ function __begin(t, v, c, l, path, uid, idx, fd, ti, tt, sv) {
   __seed = 0;
   __timeless = false;
   __projectInfo = null;
-  __selfScale = 1;
-  __gammaScale = 1;
+  __selfScale = ownScale || 1;
+  __gammaScale = gammaScale || 1;
+  value = __selfScaled(value);
 }
 
 // A migrated Cineon Converter Gamma expression: Gamma values were divided by `f`, so its own
@@ -62,7 +63,7 @@ function __scaledRead(p, v) {
   if (p.__self) return __selfScaled(v);
   if (__gammaScale === 1 || typeof v !== 'number') return v;
   try {
-    if (p.matchName === 'gamma' && p.propertyGroup(1).matchName === 'ec.utility.cineon') return v * __gammaScale;
+    if (p.__info[9] || (p.matchName === 'gamma' && p.propertyGroup(1).matchName === 'ec.utility.cineon')) return v * __gammaScale;
   } catch (e) {
     return v;
   }

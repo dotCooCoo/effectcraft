@@ -1176,3 +1176,11 @@ top of this page and in items 16–18 above.
 | 2026-10-05 | minor | Checklist updated for M3.9–M4.12 (as `docs/parity.md`) |
 | 2026-10-04 | major | Checklist audit at `d39c0e8`: ≈ 99% weighted breadth, 89 / 3 / 0 of 92 |
 | 2026-10-02 | major | First audit: ≈ 64% weighted breadth |
+
+2026-10-28: Cineon Converter compatibility is versioned per effect while the project stays at schema 2. Retained expressions keep their exact editable source, including while disabled; compatibility metadata preserves old Gamma reads and results. Shared Essential controls retain their public numbers while saved Gamma bindings convert separately, including nested instances and old animation presets; unrelated linked values keep their units. Pure unrelated wiggle expressions stay untouched. Scores and remaining estimates unchanged.
+
+2026-10-28 UI correction: On startup or an interface-language change, font menus receive glyph coverage for native and canonical labels from installed fonts. Language-preferred faces retain their order. Scores and remaining estimates unchanged.
+
+2026-10-28 rendering correction: Advanced3D GPU shadows follow the surface at each pixel center, including perspective and clipped geometry, so wide soft shadows stay aligned with CPU rendering. Scores and remaining estimates unchanged.
+
+2026-10-28: Chosen preset behavior: applying a version 1 preset to a mixed Essential control adopts retained shared units for that instance’s entire numeric output, including an existing expression. The expression text and its existing compatibility flags are preserved. This is an application rule, not a confirmed parity claim.

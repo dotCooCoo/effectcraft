@@ -602,3 +602,50 @@ fn adapters_that_cannot_rasterise_render_advanced_3d_on_the_cpu() {
     let worst = cpu.data.iter().zip(&gimg.data).flat_map(|(a, b)| (0..4).map(move |k| (a[k] - b[k]).abs())).fold(0.0f32, f32::max);
     assert!(worst <= 2.0 / 255.0, "GPU compositor with CPU Advanced 3D vs CPU: worst {worst}");
 }
+
+/// Receiver reconstruction stays on the mathematical surface after depth clipping and
+/// perspective interpolation; collapsed or tiny triangles remain bounded and finite.
+#[test]
+fn gpu_matches_cpu_pixel_centers_on_clipped_and_small_triangles() {
+    use effectcraft_geom::{Mat4, vec3};
+    use effectcraft_render::three_d::adv::{Material, Vertex};
+    let Some(g) = gpu() else { return };
+    let (p, cid) = scene_project();
+    let cases = [
+        ("perspective", [[-20.0, -16.0, 70.0], [30.0, -16.0, 180.0], [0.0, 25.0, 120.0]]),
+        ("no-shadow perspective", [[-20.0, -16.0, 70.0], [30.0, -16.0, 180.0], [0.0, 25.0, 120.0]]),
+        ("near clipped", [[-1.0, -1.0, 0.5], [20.0, -15.0, 70.0], [0.0, 20.0, 90.0]]),
+        ("tiny", [[0.14, 0.14, 100.0], [0.16, 0.14, 100.0], [0.15, 0.16, 100.0]]),
+        ("nearly degenerate", [[-10.0, 0.0, 100.0], [10.0, 0.0000001, 100.0], [0.0, 0.0000002, 100.0]]),
+        ("collapsed", [[0.0, 0.0, 100.0]; 3]),
+    ];
+    for (name, points) in cases {
+        let mut s = scene(&p, cid);
+        let inverse = Mat4(s.view.map(|row| row.map(f64::from))).inverse().unwrap();
+        s.vertices = points
+            .into_iter()
+            .map(|[x, y, z]| {
+                let v = inverse.apply(vec3(x, y, z));
+                Vertex { pos: [v.x as f32, v.y as f32, v.z as f32], normal: [0.0, 0.0, -1.0], ..Default::default() }
+            })
+            .collect();
+        s.indices = vec![0, 1, 2];
+        s.opaque_count = 3;
+        s.materials = vec![Material { base: [0.3, 0.5, 0.7, 1.0], double_sided: true, ..Default::default() }];
+        s.env = None;
+        if name == "no-shadow perspective" {
+            s.shadows.clear();
+            s.shadow_texels.clear();
+            for light in &mut s.lights {
+                light.shadow = -1;
+            }
+        }
+        let actual = g.raster_3d(&s).unwrap();
+        assert!(actual.color.iter().flatten().all(|v| v.is_finite()), "{name}: finite colors");
+        let cpu = adv::raster::render(&s);
+        if name.ends_with("perspective") || name == "near clipped" {
+            assert!(cpu.depth.iter().filter(|v| v.is_finite()).count() > 100, "{name}: visible surface");
+        }
+        compare(&s, &g);
+    }
+}

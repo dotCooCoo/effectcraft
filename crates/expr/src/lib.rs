@@ -125,7 +125,13 @@ impl Drop for FrameGuard {
 /// `value`. Other properties' expressions are evaluated through `host`.
 pub fn evaluate(host: &dyn ExprHost, ctx: &EvalCtx, layer: &Layer, prop: &Property, value: &Value, text: &str) -> Result<Value, String> {
     let out = evaluate_out(host, ctx, layer, prop, value, text, TextSelector { index_total: [1.0, 1.0], value: [100.0; 3] })?;
-    runtime::to_value(&out, value)
+    let mut result = runtime::to_value(&out, value)?;
+    if prop.expr.as_ref().is_some_and(|e| e.text == text && e.compat == Some(effectcraft_project::ExpressionCompat::CineonGamma))
+        && let Value::Scalar(x) = &mut result
+    {
+        *x /= 1.7;
+    }
+    Ok(result)
 }
 
 /// Expression Selector state: `[textIndex, textTotal]` and `selectorValue`.
@@ -178,6 +184,12 @@ fn evaluate_out(
         frame_duration: ctx.comp.frame_duration().seconds(),
         text_sel,
         selector,
+        self_scale: if prop.expr.as_ref().is_some_and(|e| e.text == text && e.compat == Some(effectcraft_project::ExpressionCompat::CineonGamma)) {
+            1.7
+        } else {
+            1.0
+        },
+        gamma_scale: if prop.expr.as_ref().is_some_and(|e| e.text == text && e.compat.is_some()) { 1.7 } else { 1.0 },
     };
     // Answer the requests nearly every expression makes up front.
     let mut frame = Frame { owner: Some(owner), ..Frame::default() };

@@ -74,7 +74,7 @@ fn box_layer(h: &Harness<'_, EffectcraftApp>) -> LayerId {
 fn mattes(h: &Harness<'_, EffectcraftApp>) -> Vec<PropGroup> {
     let comp = h.state().session.active_comp().unwrap();
     let l = comp.layer(box_layer(h)).unwrap();
-    l.effects().unwrap().groups().filter(|g| matches!(&g.kind, GroupKind::Effect { effect } if effect == om::ID)).cloned().collect()
+    l.effects().unwrap().groups().filter(|g| matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == om::ID)).cloned().collect()
 }
 
 fn v2(g: &PropGroup, id: &str) -> [f64; 2] {

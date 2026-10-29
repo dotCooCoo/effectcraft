@@ -39,3 +39,6 @@ rayon = { workspace = true }
 image = { workspace = true }
 web-time = { workspace = true }
 exr = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

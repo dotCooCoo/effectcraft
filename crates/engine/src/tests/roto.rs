@@ -584,8 +584,14 @@ fn object_matte_mattes_persist_in_the_disk_cache() {
     use effectcraft_effects::object_matte as om;
     use effectcraft_render::disk_cache::Kind;
     hold_roto_cache_test_lock();
-    let dir = std::env::temp_dir().join(format!("effectcraft-om-disk-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("effectcraft-om-disk-");
+    let cache_dir = match std::env::var_os("EFFECTCRAFT_TEST_DISK_CACHE_ROOT") {
+        Some(root) => builder.tempdir_in(root),
+        None => builder.tempdir(),
+    }
+    .expect("writable disk-cache test root");
+    let dir = cache_dir.path();
     let enable = |s: &mut Session| {
         s.execute_checked("prefs.set", json!({"values": {"disk.diskCacheFolder": dir.to_string_lossy(), "disk.diskCacheEnabled": true}})).unwrap();
     };
@@ -639,5 +645,4 @@ fn object_matte_mattes_persist_in_the_disk_cache() {
     let mut moved = ps.clone();
     moved.values.insert("objectPoint".into(), effectcraft_keyframe::Value::Vec2([c[0] + 3.0, c[1]]));
     assert!(om::ensure(&moved, size, 25.0, 0, None, &mut |_| None, &|| false).is_none());
-    let _ = std::fs::remove_dir_all(&dir);
 }

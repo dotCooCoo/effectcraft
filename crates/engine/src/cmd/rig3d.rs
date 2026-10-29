@@ -32,7 +32,7 @@ fn set(l: &mut Layer, path: &str, v: KV) {
 
 fn set_expr(l: &mut Layer, path: &str, text: String) {
     if let Some(pr) = l.props.prop_mut(path) {
-        pr.expr = Some(Expression { text, enabled: true });
+        pr.expr = Some(Expression { text, enabled: true, ..Default::default() });
     }
 }
 

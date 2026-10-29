@@ -54,7 +54,7 @@ fn assert_stereo_controls(ctl: &Layer) {
     assert_eq!(ctl.name, "Stereo 3D Controls");
     assert!(!ctl.switches.video);
     let fx = ctl.effects().unwrap().groups().next().unwrap().clone();
-    assert!(matches!(&fx.kind, GroupKind::Effect { effect } if effect == effectcraft_effects::controls::STEREO_CONTROLS));
+    assert!(matches!(&fx.kind, GroupKind::Effect { effect, .. } if effect == effectcraft_effects::controls::STEREO_CONTROLS));
     assert_eq!(fx.get("sceneDepth").unwrap().value, KV::Scalar(4.0));
 }
 
@@ -88,7 +88,7 @@ fn assert_stereo_comp(s: &Session, r: &serde_json::Value) {
     assert_eq!(out.layers[0].id.0, l);
     assert!(!out.layers[1].switches.video);
     let g = out.layers[0].effects().unwrap().groups().next().unwrap().clone();
-    assert!(matches!(&g.kind, GroupKind::Effect { effect } if effect == "ec.perspective.3dglasses"));
+    assert!(matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == "ec.perspective.3dglasses"));
     assert_eq!(g.get("leftView").unwrap().value, KV::Layer(Some(l)));
     assert_eq!(g.get("rightView").unwrap().value, KV::Layer(Some(rr)));
 }

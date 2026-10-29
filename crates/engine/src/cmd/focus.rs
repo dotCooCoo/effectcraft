@@ -37,7 +37,7 @@ fn set_focus_expr(s: &mut Session, cid: ItemId, cam: LayerId, label: &str, text:
     s.edit(label, None, |proj, _| {
         let l = layer_mut(proj, cid, cam)?;
         let pr = l.props.prop_mut("cameraOptions/focusDistance").ok_or_else(|| bad("camera", "the camera has no Focus Distance"))?;
-        pr.expr = Some(Expression { text: text.clone(), enabled: true });
+        pr.expr = Some(Expression { text: text.clone(), enabled: true, ..Default::default() });
         Ok(json!({"expression": text}))
     })
 }

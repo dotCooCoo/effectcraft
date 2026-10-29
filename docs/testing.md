@@ -14,6 +14,16 @@ Each crate with several integration-test files has one test binary, `tests/it/ma
 modules are the files in `tests/it/`. Run one file with `cargo test -p <crate> --test it <module>::`
 or `cargo nextest run -p <crate> -E 'binary(it) and test(/^<module>::/)'`.
 
+The Object Matte disk-cache persistence test keeps the real free-space reserve enabled. On a
+low-space host, set `EFFECTCRAFT_TEST_DISK_CACHE_ROOT` for the test process to an existing directory
+on a volume with more than 2 GiB or 5% of its capacity free, whichever is larger. That one test
+creates an owned temporary directory there. Other tests keep using the normal `TEMP`/`TMP`;
+on Windows, use a local NTFS directory for their file-link and locking checks.
+
+For font-menu frame captures, run the `ui_font_search` integration test with `EC_SNAPSHOT_DIR`
+set to an existing output directory. Optional `EC_FONT_SNAPSHOT_QUERY` captures matching native
+family labels before the normal search/Undo checks continue.
+
 ## What the tests cover
 
 - **Engine commands** (`crates/engine/src/tests*.rs`): every command family, including undo and

@@ -681,14 +681,37 @@ fn opening_a_schema_1_project_moves_shape_layer_effect_points_into_effect_space(
     check(&s3);
 }
 
-/// Cineon Converter's Log to Linear before schema 3: the linear value raised to `1.7 / gamma`
+/// Remove the per-effect version to model a file written by the released Gamma scale.
+fn unversioned_cineon(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::Object(fields) => {
+            fields.remove("cineon_gamma_units");
+            fields.remove("cineon_gamma_map");
+            fields.remove("legacy_gamma_targets");
+            if fields.get("effect").and_then(serde_json::Value::as_str) == Some("ec.utility.cineon") {
+                fields.remove("version");
+            }
+            for child in fields.values_mut() {
+                unversioned_cineon(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for child in items {
+                unversioned_cineon(child);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Cineon Converter's original Log to Linear: the linear value raised to `1.7 / gamma`
 /// (no Highlight Rolloff).
-fn cineon_before_schema_3(v: f32, gamma: f32) -> f32 {
+fn cineon_on_legacy_scale(v: f32, gamma: f32) -> f32 {
     let off = 10f32.powf((95.0 - 685.0) * 0.002 / 0.6);
     ((10f32.powf((v * 1023.0 - 685.0) * 0.002 / 0.6) - off) / (1.0 - off)).max(0.0).powf(1.7 / gamma)
 }
 
-/// A project saved before schema 3 holds Cineon Converter's Gamma on the old scale, where 1.7
+/// A project saved before effect version 1 holds Cineon Converter's Gamma on the old scale, where 1.7
 /// gave linear output. Opening it divides the Gamma, its keyframes and their speeds by 1.7, so
 /// the frames render as they did; saving and opening again converts nothing a second time.
 #[test]
@@ -711,6 +734,7 @@ fn opening_a_schema_2_project_keeps_what_cineon_converter_renders() {
 
     let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
     old["schema"] = json!(2);
+    unversioned_cineon(&mut old);
     let dir = std::env::temp_dir().join(format!("ec-cineon-gamma-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("old.ecproj").to_string_lossy().to_string();
@@ -727,7 +751,7 @@ fn opening_a_schema_2_project_keeps_what_cineon_converter_renders() {
         for (t, old_gamma) in [(0.0, 2.2), (0.5, 2.8), (1.0, 3.4)] {
             let got = s2.render(cid, Tick::from_seconds_f64(t), Default::default()).get(4, 4);
             for c in 0..3 {
-                let want = cineon_before_schema_3(input[c], old_gamma);
+                let want = cineon_on_legacy_scale(input[c], old_gamma);
                 assert!((got[c] - want).abs() < 1e-4, "{t} s, channel {c}: {} rendered, {want} before", got[c]);
             }
         }
@@ -740,7 +764,7 @@ fn opening_a_schema_2_project_keeps_what_cineon_converter_renders() {
     check(&s3);
 }
 
-/// A Cineon Converter saved before schema 3 without a Gamma property gets today's default
+/// A Cineon Converter saved before effect version 1 without a Gamma property gets today's default
 /// (1, linear output) when opened, not that default divided by 1.7.
 #[test]
 fn opening_a_schema_2_cineon_converter_without_gamma_gives_linear_output() {
@@ -767,6 +791,7 @@ fn opening_a_schema_2_cineon_converter_without_gamma_gives_linear_output() {
     }
     let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
     old["schema"] = json!(2);
+    unversioned_cineon(&mut old);
     drop_gamma(&mut old);
     assert!(!old.to_string().contains("\"match\":\"gamma\""));
     let dir = std::env::temp_dir().join(format!("ec-cineon-no-gamma-{}", std::process::id()));
@@ -780,13 +805,13 @@ fn opening_a_schema_2_cineon_converter_without_gamma_gives_linear_output() {
     assert!((gamma - 1.0).abs() < 1e-9, "the missing Gamma gets today's default: {gamma}");
     let got = s2.render(cid, Tick::ZERO, Default::default()).get(4, 4);
     for c in 0..3 {
-        let want = cineon_before_schema_3(input[c], 1.7);
+        let want = cineon_on_legacy_scale(input[c], 1.7);
         assert!((got[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want} linear", got[c]);
     }
 }
 
 /// A precomp instance that overrides an exposed Cineon Converter Gamma in a project saved
-/// before schema 3 has its Essential Properties value converted too, so it renders as before.
+/// before effect version 1 has its Essential Properties value converted too, so it renders as before.
 #[test]
 fn opening_a_schema_2_project_converts_an_overridden_cineon_gamma() {
     let mut s = Session::default();
@@ -799,13 +824,12 @@ fn opening_a_schema_2_project_converts_an_overridden_cineon_gamma() {
     s.execute("prop.set", json!({"layer": solid, "path": "effects/#1/highlightRolloff", "value": 0.0})).unwrap();
     s.execute("prop.set", json!({"layer": solid, "path": "effects/#1/gamma", "value": 1.7})).unwrap();
     let control = s.execute("essential.addProperty", json!({"layer": solid, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
-    // A hidden solid whose Gamma control also drives its Opacity: one value cannot keep both
-    // renders, so its instance value stays as saved.
+    // This visible Gamma+Opacity control keeps its public number and both rendered targets.
     let mixed_layer = s.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
     apply(&mut s, mixed_layer, "Cineon Converter");
     let mixed = s.execute("essential.addProperty", json!({"layer": mixed_layer, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
     s.execute("essential.linkProperty", json!({"control": mixed, "layer": mixed_layer, "path": "transform/opacity"})).unwrap();
-    s.execute("layer.setSwitch", json!({"layers": [mixed_layer], "switch": "video", "value": false})).unwrap();
+    s.execute("prop.set", json!({"layer": mixed_layer, "path": "effects/#1/highlightRolloff", "value": 0.0})).unwrap();
     s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
     let main = s.active_comp_id().unwrap();
     let inst = s.execute("layer.addItem", json!({"item": inner.0})).unwrap()["layer"].as_u64().unwrap();
@@ -815,6 +839,7 @@ fn opening_a_schema_2_project_converts_an_overridden_cineon_gamma() {
 
     let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
     old["schema"] = json!(2);
+    unversioned_cineon(&mut old);
     let dir = std::env::temp_dir().join(format!("ec-cineon-essential-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("old.ecproj").to_string_lossy().to_string();
@@ -831,9 +856,12 @@ fn opening_a_schema_2_project_converts_an_overridden_cineon_gamma() {
     assert!((m["value"].as_f64().unwrap() - 2.2).abs() < 1e-9, "a control that also drives Opacity keeps its value: {m}");
     let got = s2.render(main, Tick::ZERO, Default::default()).get(4, 4);
     for ch in 0..3 {
-        let want = cineon_before_schema_3(input[ch], 2.2);
+        let want = cineon_on_legacy_scale(input[ch], 2.2);
         assert!((got[ch] - want).abs() < 1e-4, "channel {ch}: {} rendered, {want} before", got[ch]);
     }
+    s2.execute("essential.linkProperty", json!({"comp":inner.0,"control":control,"layer":solid,"path":"transform/opacity"})).unwrap();
+    let p = s2.project.comp(main).unwrap().layer(LayerId(inst)).unwrap().props.prop(&format!("essential/eg{control}")).unwrap();
+    assert!(p.cineon_gamma_units, "adding a mixed link must retain converted public units for old expression readers");
 }
 
 /// A Gamma exposed again by a middle comp, from its precomp layer's Essential Properties, is
@@ -860,6 +888,7 @@ fn opening_a_schema_2_project_converts_a_cineon_gamma_exposed_through_a_nested_p
 
     let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
     old["schema"] = json!(2);
+    unversioned_cineon(&mut old);
     let dir = std::env::temp_dir().join(format!("ec-cineon-nested-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("old.ecproj").to_string_lossy().to_string();
@@ -898,12 +927,14 @@ fn version_1_presets_convert_cineon_converter_gamma() {
     assert!((gamma(&s, 1) - 2.2).abs() < 1e-9, "a current preset is applied as saved");
     let mut v1 = effect_preset;
     v1[tag] = json!(1);
+    unversioned_cineon(&mut v1);
     s.execute("anim.applyPreset", json!({"preset": v1, "layers": [a]})).unwrap();
     assert!((gamma(&s, 2) - 2.2 / 1.7).abs() < 1e-9, "a version 1 effect is converted");
 
     s.execute("prop.set", json!({"layer": a, "path": "effects/#1/gamma", "value": 1.0})).unwrap();
     let mut v1 = prop_preset;
     v1[tag] = json!(1);
+    unversioned_cineon(&mut v1);
     let r = s.execute("anim.applyPreset", json!({"preset": v1, "layers": [a]})).unwrap();
     assert_eq!(r["skipped"], json!([]), "{r}");
     assert!((gamma(&s, 0) - 2.2 / 1.7).abs() < 1e-9, "a version 1 Gamma property is converted");
@@ -926,7 +957,9 @@ fn version_1_presets_read_cineon_gamma_in_other_expressions_as_saved() {
         preset["effectcraftAnimationPreset"] = json!(version);
         s.execute("anim.applyPreset", json!({"preset": preset, "layers": [a]})).unwrap();
         let applied = expression(&s);
-        assert_eq!(applied == text, version == 2, "version {version}: {applied}");
+        assert_eq!(applied, text, "version {version}: original editable text");
+        let metadata = layer(&s, a).props.prop("transform/rotation").unwrap().expr.as_ref().unwrap().compat;
+        assert_eq!(metadata.is_some(), version == 1);
         assert!(applied.contains("Gamma"), "{applied}");
     }
 }
@@ -936,15 +969,19 @@ fn presets_convert_exposed_cineon_gamma_for_direct_and_nested_controls() {
     for nested in [false, true] {
         for mixed in [false, true] {
             let mut s = Session::default();
+            s.execute("file.projectSettings", json!({"bitDepth":32})).unwrap();
             s.execute("comp.new", json!({"name": "Inner", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
             let mut source = s.active_comp_id().unwrap();
-            let solid = s.execute("layer.newSolid", json!({"width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
+            let leaf = source;
+            let solid = s.execute("layer.newSolid", json!({"color":[0.4,0.5,0.6],"width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
             apply(&mut s, solid, "Cineon Converter");
+            s.execute("prop.set", json!({"layer":solid,"path":"effects/#1/highlightRolloff","value":0})).unwrap();
             let mut control = s.execute("essential.addProperty", json!({"layer": solid, "path": "effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
             if mixed {
                 s.execute("essential.linkProperty", json!({"control": control, "layer": solid, "path": "transform/opacity"})).unwrap();
             }
             if nested {
+                control = s.execute("essential.addMirror", json!({"control":control})).unwrap()["control"].as_u64().unwrap();
                 s.execute("comp.new", json!({"name": "Middle", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
                 let middle = s.active_comp_id().unwrap();
                 let instance = s.execute("layer.addItem", json!({"item": source.0})).unwrap()["layer"].as_u64().unwrap();
@@ -953,6 +990,7 @@ fn presets_convert_exposed_cineon_gamma_for_direct_and_nested_controls() {
                 source = middle;
             }
             s.execute("comp.new", json!({"name": "Main", "width": 8, "height": 8, "frameRate": 30, "duration": 2})).unwrap();
+            let main = s.active_comp_id().unwrap();
             let instance = s.execute("layer.addItem", json!({"item": source.0})).unwrap()["layer"].as_u64().unwrap();
             let path = format!("essential/{}", effectcraft_project::essential::match_id(control));
             s.execute("essential.set", json!({"layer": instance, "control": control, "value": 2.2})).unwrap();
@@ -971,7 +1009,23 @@ fn presets_convert_exposed_cineon_gamma_for_direct_and_nested_controls() {
                 let value = s.execute("prop.get", json!({"layer": instance, "path": path})).unwrap()["value"].as_f64().unwrap();
                 let expected = if version == 1 && !mixed { 2.2 / 1.7 } else { 2.2 };
                 assert!((value - expected).abs() < 1e-9, "nested={nested}, mixed={mixed}, version={version}: {value} != {expected}");
+                // Render the visible nested mixed control against explicit independent leaf values.
+                let mut reference = Session { project: s.project.clone(), ..Session::default() };
+                let leaf_layer = std::sync::Arc::make_mut(&mut reference.project).comp_mut(leaf).unwrap().layer_mut(LayerId(solid)).unwrap();
+                leaf_layer.props.prop_mut("effects/#1/gamma").unwrap().value = KV::Scalar(if version == 1 { 2.2 / 1.7 } else { 2.2 });
+                leaf_layer.props.prop_mut("transform/opacity").unwrap().value = KV::Scalar(if mixed { 2.2 } else { 100.0 });
+                let want = reference.render(leaf, Tick::ZERO, Default::default()).get(4, 4);
+                let got = s.render(main, Tick::ZERO, Default::default()).get(4, 4);
+                for ch in 0..4 {
+                    assert!((got[ch] - want[ch]).abs() < 1e-5, "nested={nested}, mixed={mixed}, version={version}: {got:?} != {want:?}");
+                }
             }
+            // Applying the old preset is local to that instance; a fresh sibling and the
+            // shared definition retain current semantics.
+            let sibling = s.execute("layer.addItem", json!({"item":source.0})).unwrap()["layer"].as_u64().unwrap();
+            let sibling_prop = s.project.comp(main).unwrap().layer(LayerId(sibling)).unwrap().props.prop(&path).unwrap();
+            assert!(sibling_prop.cineon_gamma_map.is_none());
+            assert!(s.project.comp(source).unwrap().essential.as_ref().unwrap().resolve(control).unwrap().legacy_gamma_targets.is_empty());
         }
     }
 }
@@ -998,6 +1052,87 @@ fn version_1_presets_leave_an_exposed_gamma_expression_they_do_not_set() {
     s.execute("anim.applyPreset", json!({"preset": preset, "layers": [instance]})).unwrap();
     let kept = layer(&s, instance).props.prop(&path).and_then(|p| p.expr.clone()).map(|e| e.text);
     assert_eq!(kept.as_deref(), Some("1"));
+}
+
+#[test]
+fn cineon_migration_preserves_text_disabled_expressions_and_unrelated_wiggle() {
+    let (mut s, a, b) = comp_with_two_solids();
+    apply(&mut s, a, "Cineon Converter");
+    s.execute("prop.set", json!({"layer":a,"path":"effects/#1/gamma","value":1.7})).unwrap();
+    let source = "  // retained source\n2.2";
+    s.execute("prop.setExpression", json!({"layer":a,"path":"effects/#1/gamma","expression":source,"enabled":false})).unwrap();
+    s.execute("prop.setExpression", json!({"layer":b,"path":"transform/rotation","expression":"wiggle(2, 5)"})).unwrap();
+    let untouched = layer(&s, b).props.prop("transform/rotation").unwrap().expr.clone();
+    let reader = "thisComp.layer(2).effect('Cineon Converter')('Gamma') * 100";
+    s.execute("prop.setExpression", json!({"layer":b,"path":"transform/opacity","expression":reader,"enabled":false})).unwrap();
+    let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+    unversioned_cineon(&mut old);
+    s.project = effectcraft_project::Project::from_json(&old.to_string()).unwrap().into();
+    crate::session::upgrade_effects(std::sync::Arc::make_mut(&mut s.project));
+    assert_eq!(s.project.schema, 2);
+    let expr = layer(&s, a).props.prop("effects/#1/gamma").unwrap().expr.clone().unwrap();
+    assert_eq!(expr.text, source);
+    assert!(!expr.enabled);
+    assert_eq!(expr.compat, Some(effectcraft_project::ExpressionCompat::CineonGamma));
+    assert_eq!(layer(&s, b).props.prop("transform/rotation").unwrap().expr, untouched);
+    assert_eq!(
+        layer(&s, b).props.prop("transform/opacity").unwrap().expr.as_ref().unwrap().compat,
+        Some(effectcraft_project::ExpressionCompat::CineonGammaReader)
+    );
+    s.execute("prop.setExpression", json!({"layer":b,"path":"transform/opacity","enabled":true})).unwrap();
+    s.execute("prop.setExpression", json!({"layer":b,"path":"transform/opacity","expression":reader})).unwrap();
+    assert_eq!(
+        layer(&s, b).props.prop("transform/opacity").unwrap().expr.as_ref().unwrap().compat,
+        Some(effectcraft_project::ExpressionCompat::CineonGammaReader)
+    );
+    s.execute("prop.setExpression", json!({"layer":a,"path":"effects/#1/gamma","enabled":true})).unwrap();
+    assert!(layer(&s, a).props.prop("effects/#1/gamma").unwrap().expr.as_ref().unwrap().compat.is_some());
+    s.execute("prop.setExpression", json!({"layer":a,"path":"effects/#1/gamma","expression":source})).unwrap();
+    assert!(layer(&s, a).props.prop("effects/#1/gamma").unwrap().expr.as_ref().unwrap().compat.is_some(), "same text is not an edit");
+    s.execute("prop.setExpression", json!({"layer":a,"path":"effects/#1/gamma","expression":"1"})).unwrap();
+    assert_eq!(layer(&s, a).props.prop("effects/#1/gamma").unwrap().expr.as_ref().unwrap().compat, None);
+    let saved = s.project.to_file_json().unwrap();
+    let mut reopened = effectcraft_project::Project::from_json(&saved).unwrap();
+    crate::session::upgrade_effects(&mut reopened);
+    assert_eq!(&reopened, &*s.project, "no second conversion");
+}
+
+#[test]
+fn prototype_schema_three_cineon_opens_without_another_gamma_conversion() {
+    let (mut s, a, _) = comp_with_two_solids();
+    apply(&mut s, a, "Cineon Converter");
+    s.execute("prop.set", json!({"layer":a,"path":"effects/#1/gamma","value":1.3})).unwrap();
+    let mut json: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+    unversioned_cineon(&mut json);
+    json["schema"] = json!(3);
+    let mut project = effectcraft_project::Project::from_json(&json.to_string()).unwrap();
+    crate::session::upgrade_effects(&mut project);
+    assert_eq!(project.schema, 2);
+    let l = project.comp(s.active_comp_id().unwrap()).unwrap().layer(LayerId(a)).unwrap();
+    assert_eq!(l.props.prop("effects/#1/gamma").unwrap().value.as_f64(), 1.3);
+}
+
+#[test]
+fn cineon_saved_gamma_at_the_old_guard_keeps_a_visible_near_white_render() {
+    let mut s = Session::default();
+    s.execute("file.projectSettings", json!({"bitDepth":32})).unwrap();
+    s.execute("comp.new", json!({"name":"Boundary","width":8,"height":8,"frameRate":30,"duration":1})).unwrap();
+    let sample = 684.5f32 / 1023.0;
+    let a = s.execute("layer.newSolid", json!({"color":[sample,sample,sample],"width":8,"height":8})).unwrap()["layer"].as_u64().unwrap();
+    let cid = s.active_comp_id().unwrap();
+    let input = s.render(cid, Tick::ZERO, Default::default()).get(4, 4)[0];
+    apply(&mut s, a, "Cineon Converter");
+    s.execute("prop.set", json!({"layer":a,"path":"effects/#1/highlightRolloff","value":0})).unwrap();
+    let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+    unversioned_cineon(&mut old);
+    let mut project = effectcraft_project::Project::from_json(&old.to_string()).unwrap();
+    project.comp_mut(cid).unwrap().layer_mut(LayerId(a)).unwrap().props.prop_mut("effects/#1/gamma").unwrap().value = KV::Scalar(0.01);
+    crate::session::upgrade_effects(&mut project);
+    s.project = project.into();
+    let expected = cineon_on_legacy_scale(input, 0.01);
+    assert!(expected > 0.1, "the boundary sample must not underflow");
+    let got = s.render(cid, Tick::ZERO, Default::default()).get(4, 4)[0];
+    assert!((got - expected).abs() < 1e-4, "{got} vs {expected}");
 }
 
 /// #410: `effect.warning` reports what an OCIO effect can't render as asked (Effect Controls
@@ -1133,4 +1268,228 @@ fn copied_effect_property_pastes_onto_the_same_effect() {
     let r = s.execute("edit.paste", json!({})).unwrap();
     assert_eq!(r["expressions"], 1, "{r}");
     assert_eq!(layer(&s, b).props.prop("effects/#1/blurriness").unwrap().expr.as_ref().unwrap().text, "time * 10");
+}
+
+#[test]
+fn legacy_mixed_cineon_controls_preserve_visible_output_and_inverse_source_edits() {
+    use effectcraft_project::{LayerId, essential};
+    for gamma_primary in [false, true] {
+        let mut s = Session::default();
+        s.execute("file.projectSettings", json!({"bitDepth":32})).unwrap();
+        s.execute("comp.new", json!({"name":"Mixed", "width":8,"height":8,"duration":2})).unwrap();
+        let inner = s.active_comp_id().unwrap();
+        let solid = s.execute("layer.newSolid", json!({"color":[0.4,0.5,0.6],"width":8,"height":8})).unwrap()["layer"].as_u64().unwrap();
+        apply(&mut s, solid, "Cineon Converter");
+        s.execute("prop.set", json!({"layer":solid,"path":"effects/#1/highlightRolloff","value":0})).unwrap();
+        let (primary, linked) = if gamma_primary { ("effects/#1/gamma", "transform/opacity") } else { ("transform/opacity", "effects/#1/gamma") };
+        let control = s.execute("essential.addProperty", json!({"layer":solid,"path":primary})).unwrap()["controls"][0].as_u64().unwrap();
+        s.execute("essential.linkProperty", json!({"control":control,"layer":solid,"path":linked})).unwrap();
+        s.execute("prop.set", json!({"layer":solid,"path":primary,"value":2.2})).unwrap();
+        s.execute("comp.new", json!({"name":"Main","width":8,"height":8,"duration":2})).unwrap();
+        let main = s.active_comp_id().unwrap();
+        let instance = s.execute("layer.addItem", json!({"item":inner.0})).unwrap()["layer"].as_u64().unwrap();
+        s.execute("essential.set", json!({"layer":instance,"control":control,"value":3.4})).unwrap();
+        let mut old: serde_json::Value = serde_json::from_str(&s.project.to_file_json().unwrap()).unwrap();
+        unversioned_cineon(&mut old);
+        // Independent current-unit render: assign the two target values explicitly.
+        let explicit = essential::with_overrides(&s.project, inner, &[essential::Override { control, value: KV::Scalar(3.4), gamma_map: None }]).unwrap();
+        let mut expected = explicit;
+        expected.comp_mut(inner).unwrap().layer_mut(LayerId(solid)).unwrap().props.prop_mut("effects/#1/gamma").unwrap().value = KV::Scalar(2.0);
+        let reference = Session { project: std::sync::Arc::new(expected), ..Session::default() };
+        let expected_pixel = reference.render(inner, Tick::ZERO, Default::default()).get(4, 4);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mixed.ecproj");
+        std::fs::write(&path, old.to_string()).unwrap();
+        let mut restored = Session::default();
+        restored.execute("file.open", json!({"path":path})).unwrap();
+        let check = |s: &Session| {
+            let got = s.render(main, Tick::ZERO, Default::default()).get(4, 4);
+            for c in 0..4 {
+                assert!((got[c] - expected_pixel[c]).abs() < 1e-5, "primary={gamma_primary}, channel{c}: {got:?} != {expected_pixel:?}");
+            }
+            let pr = s.project.comp(main).unwrap().layer(LayerId(instance)).unwrap().props.prop(&format!("essential/eg{control}")).unwrap();
+            assert_eq!(pr.value, KV::Scalar(3.4));
+            assert!(pr.cineon_gamma_map.is_some());
+        };
+        check(&restored);
+        restored.execute("file.save", json!({"path":path})).unwrap();
+        let mut reopened = Session::default();
+        reopened.execute("file.open", json!({"path":path})).unwrap();
+        check(&reopened);
+        let mut shifted = (*reopened.project).clone();
+        essential::offset_ids(&mut shifted, 100000);
+        let imported = Session { project: shifted.into(), ..Session::default() };
+        let shifted_pixel = imported.render(effectcraft_project::ItemId(main.0 + 100000), Tick::ZERO, Default::default()).get(4, 4);
+        for c in 0..4 {
+            assert!((shifted_pixel[c] - expected_pixel[c]).abs() < 1e-5, "remapped bindings: {shifted_pixel:?}");
+        }
+        // A Gamma source edit is inverted into shared control units, including keys and speeds.
+        reopened.execute("comp.open", json!({"comp":inner.0})).unwrap();
+        reopened.execute("prop.set", json!({"layer":solid,"path":"effects/#1/gamma","value":2.0})).unwrap();
+        let l = reopened.project.comp(inner).unwrap().layer(LayerId(solid)).unwrap();
+        assert!((l.props.prop("transform/opacity").unwrap().value.as_f64() - 3.4).abs() < 1e-9);
+        let listing = reopened.execute("essential.list", json!({})).unwrap();
+        assert!((listing["controls"][0]["value"].as_f64().unwrap() - 3.4).abs() < 1e-9, "{listing}");
+        reopened.execute("essential.pushToComp", json!({"comp":main.0,"layer":instance,"control":control})).unwrap();
+        let l = reopened.project.comp(inner).unwrap().layer(LayerId(solid)).unwrap();
+        assert!((l.props.prop("effects/#1/gamma").unwrap().value.as_f64() - 2.0).abs() < 1e-9);
+        assert!((l.props.prop("transform/opacity").unwrap().value.as_f64() - 3.4).abs() < 1e-9);
+        reopened
+            .edit("Gamma keys", None, |p, _| {
+                let gamma = p.comp_mut(inner).unwrap().layer_mut(LayerId(solid)).unwrap().props.prop_mut("effects/#1/gamma").unwrap();
+                let mut k = effectcraft_keyframe::Keyframe::new(Tick::from_seconds_f64(0.5), KV::Scalar(2.0));
+                k.in_ease = vec![Ease { speed: 0.4, influence: 0.3 }];
+                k.out_ease = vec![Ease { speed: 0.8, influence: 0.6 }];
+                gamma.keys = vec![k];
+                Ok(())
+            })
+            .unwrap();
+        let keys = &reopened.project.comp(inner).unwrap().layer(LayerId(solid)).unwrap().props.prop("transform/opacity").unwrap().keys;
+        assert_eq!(keys[0].time, Tick::from_seconds_f64(0.5));
+        assert!((keys[0].value.as_f64() - 3.4).abs() < 1e-9);
+        assert!((keys[0].in_ease[0].speed - 0.68).abs() < 1e-9);
+        assert!((keys[0].out_ease[0].speed - 1.36).abs() < 1e-9);
+        assert_eq!(keys[0].in_ease[0].influence, 0.3);
+        if !gamma_primary {
+            let following = reopened.execute("layer.addItem", json!({"comp":main.0,"item":inner.0})).unwrap()["layer"].as_u64().unwrap();
+            assert!(essential::overridden(reopened.project.comp(main).unwrap().layer(LayerId(following)).unwrap()).is_empty());
+            reopened.execute("essential.unlinkProperty", json!({"comp":inner.0,"control":control,"layer":solid,"path":"effects/#1/gamma"})).unwrap();
+            assert!(
+                essential::overridden(reopened.project.comp(main).unwrap().layer(LayerId(following)).unwrap()).is_empty(),
+                "maintenance must not freeze a following instance"
+            );
+            reopened.execute("essential.linkProperty", json!({"comp":inner.0,"control":control,"layer":solid,"path":"effects/#1/gamma"})).unwrap();
+            let ctl = reopened.project.comp(inner).unwrap().essential.as_ref().unwrap().find(control).unwrap();
+            assert!(ctl.legacy_gamma_targets.is_empty(), "a new link starts in current units");
+            let l = reopened.project.comp(inner).unwrap().layer(LayerId(solid)).unwrap();
+            assert_eq!(l.props.prop("effects/#1/gamma").unwrap().value, l.props.prop("transform/opacity").unwrap().value);
+        }
+    }
+}
+
+#[test]
+fn mixed_cineon_push_and_nested_bindings_keep_distinct_instance_policies() {
+    let mut s = Session::default();
+    s.execute("file.projectSettings", json!({"bitDepth":32})).unwrap();
+    s.execute("comp.new", json!({"name":"Leaf","width":8,"height":8,"duration":2})).unwrap();
+    let leaf = s.active_comp_id().unwrap();
+    let solid = s.execute("layer.newSolid", json!({"color":[0.4,0.5,0.6],"width":8,"height":8})).unwrap()["layer"].as_u64().unwrap();
+    apply(&mut s, solid, "Cineon Converter");
+    s.execute("prop.set", json!({"layer":solid,"path":"effects/#1/highlightRolloff","value":0})).unwrap();
+    let control = s.execute("essential.addProperty", json!({"layer":solid,"path":"effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("essential.linkProperty", json!({"control":control,"layer":solid,"path":"transform/opacity"})).unwrap();
+    s.execute("comp.new", json!({"name":"Middle","width":16,"height":8,"duration":2})).unwrap();
+    let middle = s.active_comp_id().unwrap();
+    let left = s.execute("layer.addItem", json!({"item":leaf.0})).unwrap()["layer"].as_u64().unwrap();
+    let right = s.execute("layer.addItem", json!({"item":leaf.0})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("prop.set", json!({"layer":left,"path":"transform/position","value":[4,4,0]})).unwrap();
+    s.execute("prop.set", json!({"layer":right,"path":"transform/position","value":[12,4,0]})).unwrap();
+    let path = format!("essential/eg{control}");
+    let preset = json!({"effectcraftAnimationPreset":1,"properties":[{"path":path,"value":{"Scalar":3.4},"keys":[]}],"effects":[]});
+    // Value's externally tagged representation is generated rather than assumed.
+    let mut preset = preset;
+    preset["properties"][0]["value"] = serde_json::to_value(KV::Scalar(3.4)).unwrap();
+    s.execute("anim.applyPreset", json!({"preset":preset,"layers":[left]})).unwrap();
+    s.execute("essential.set", json!({"layer":right,"control":control,"value":1.9})).unwrap();
+    let leaf_pixel = |s: &Session, gamma: f64, opacity: f64| {
+        let mut reference = Session { project: s.project.clone(), ..Session::default() };
+        let l = std::sync::Arc::make_mut(&mut reference.project).comp_mut(leaf).unwrap().layer_mut(LayerId(solid)).unwrap();
+        l.props.prop_mut("effects/#1/gamma").unwrap().value = KV::Scalar(gamma);
+        l.props.prop_mut("transform/opacity").unwrap().value = KV::Scalar(opacity);
+        reference.render(leaf, Tick::ZERO, Default::default()).get(4, 4)
+    };
+    let compare = |got: [f32; 4], want: [f32; 4]| {
+        for ch in 0..4 {
+            assert!((got[ch] - want[ch]).abs() < 1e-5, "{got:?} != {want:?}");
+        }
+    };
+    compare(s.render(middle, Tick::ZERO, Default::default()).get(4, 4), leaf_pixel(&s, 2.0, 3.4));
+    compare(s.render(middle, Tick::ZERO, Default::default()).get(12, 4), leaf_pixel(&s, 1.9, 1.9));
+    s.execute("essential.pushToComp", json!({"layer":left,"control":control})).unwrap();
+    compare(s.render(middle, Tick::ZERO, Default::default()).get(4, 4), leaf_pixel(&s, 2.0, 3.4));
+    compare(s.render(middle, Tick::ZERO, Default::default()).get(12, 4), leaf_pixel(&s, 1.9, 1.9));
+    let old = s.project.comp(middle).unwrap().layer(LayerId(right)).unwrap().props.prop(&path).unwrap();
+    assert!(old.cineon_gamma_map.is_some(), "the sibling's prior identity policy is explicit after Push");
+    let outer_control = s.execute("essential.addProperty", json!({"layer":left,"path":path})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("essential.linkProperty", json!({"comp":middle.0,"control":outer_control,"layer":right,"path":path})).unwrap();
+    s.execute("comp.new", json!({"name":"Main","width":16,"height":8,"duration":2})).unwrap();
+    let main = s.active_comp_id().unwrap();
+    let outer = s.execute("layer.addItem", json!({"item":middle.0})).unwrap()["layer"].as_u64().unwrap();
+    s.execute("essential.set", json!({"layer":outer,"control":outer_control,"value":2.2})).unwrap();
+    let check = |s: &Session| {
+        compare(s.render(main, Tick::ZERO, Default::default()).get(4, 4), leaf_pixel(s, 2.2 / 1.7, 2.2));
+        compare(s.render(main, Tick::ZERO, Default::default()).get(12, 4), leaf_pixel(s, 2.2, 2.2));
+    };
+    check(&s);
+    let restored = Session { project: effectcraft_project::Project::from_json(&s.project.to_file_json().unwrap()).unwrap().into(), ..Session::default() };
+    check(&restored);
+
+    s.execute("comp.new", json!({"name":"Repeated","width":16,"height":8,"duration":2})).unwrap();
+    let repeated = s.active_comp_id().unwrap();
+    let mut shared = None;
+    for _ in 0..12 {
+        let instance = s.execute("layer.addItem", json!({"item":leaf.0})).unwrap()["layer"].as_u64().unwrap();
+        if let Some(control) = shared {
+            s.execute("essential.linkProperty", json!({"comp":repeated.0,"control":control,"layer":instance,"path":path})).unwrap();
+        } else {
+            shared = Some(s.execute("essential.addProperty", json!({"layer":instance,"path":path})).unwrap()["controls"][0].as_u64().unwrap());
+        }
+    }
+    let graph = effectcraft_project::essential::gamma::definition_map(&s.project, repeated, shared.unwrap()).unwrap();
+    assert_eq!(graph.graph.nodes.len(), 2, "identical source-instance policies must share a node");
+    let mut project = (*s.project).clone();
+    let original = match &project.item(repeated).unwrap().kind {
+        effectcraft_project::ItemKind::Comp(c) => c.clone(),
+        _ => panic!("expected composition fixture"),
+    };
+    effectcraft_project::essential::gamma::prune(&mut project);
+    effectcraft_project::essential::gamma::mark_units(&mut project);
+    let unchanged = match &project.item(repeated).unwrap().kind {
+        effectcraft_project::ItemKind::Comp(c) => c,
+        _ => panic!("expected composition fixture"),
+    };
+    assert!(std::sync::Arc::ptr_eq(&original, unchanged), "valid compatibility metadata must not clone whole comps on ordinary edits");
+}
+
+#[test]
+fn version_1_mixed_preset_adopts_shared_units_for_a_retained_current_expression() {
+    struct LiteralExpression;
+    impl effectcraft_render::ExprHost for LiteralExpression {
+        fn eval(&self, _ctx: &effectcraft_render::EvalCtx, _layer: &Layer, prop: &effectcraft_project::Property, _value: &KV) -> Result<KV, String> {
+            prop.expr.as_ref().map(|e| e.text.trim()).unwrap_or_default().parse::<f64>().map(KV::Scalar).map_err(|e| e.to_string())
+        }
+    }
+    let mut s = Session { expr: Some(std::sync::Arc::new(LiteralExpression)), ..Session::default() };
+    s.execute("file.projectSettings", json!({"bitDepth":32})).unwrap();
+    s.execute("comp.new", json!({"name":"Inner","width":8,"height":8,"duration":2})).unwrap();
+    let inner = s.active_comp_id().unwrap();
+    let solid = s.execute("layer.newSolid", json!({"color":[0.4,0.5,0.6],"width":8,"height":8})).unwrap()["layer"].as_u64().unwrap();
+    apply(&mut s, solid, "Cineon Converter");
+    s.execute("prop.set", json!({"layer":solid,"path":"effects/#1/highlightRolloff","value":0})).unwrap();
+    let control = s.execute("essential.addProperty", json!({"layer":solid,"path":"effects/#1/gamma"})).unwrap()["controls"][0].as_u64().unwrap();
+    s.execute("essential.linkProperty", json!({"control":control,"layer":solid,"path":"transform/opacity"})).unwrap();
+    s.execute("comp.new", json!({"name":"Main","width":8,"height":8,"duration":2})).unwrap();
+    let main = s.active_comp_id().unwrap();
+    let instance = s.execute("layer.addItem", json!({"item":inner.0})).unwrap()["layer"].as_u64().unwrap();
+    let path = format!("essential/eg{control}");
+    let text = " 4.4 ";
+    s.execute("prop.setExpression", json!({"layer":instance,"path":path,"expression":text})).unwrap();
+    let kept = s.project.comp(main).unwrap().layer(LayerId(instance)).unwrap().props.prop(&path).unwrap().expr.clone();
+    assert!(kept.as_ref().unwrap().compat.is_none());
+    assert_eq!(kept.as_ref().unwrap().text, text);
+    let preset = json!({"effectcraftAnimationPreset":1,"properties":[{"path":path,"value":serde_json::to_value(KV::Scalar(2.2)).unwrap(),"keys":[],"expression":null}],"effects":[]});
+    s.execute("anim.applyPreset", json!({"preset":preset,"layers":[instance]})).unwrap();
+    let prop = s.project.comp(main).unwrap().layer(LayerId(instance)).unwrap().props.prop(&path).unwrap();
+    assert_eq!(prop.expr, kept, "preset application retains the existing expression text and flags");
+    assert!(prop.cineon_gamma_map.is_some());
+    assert!(!prop.cineon_gamma_units);
+    let mut reference = Session { project: s.project.clone(), ..Session::default() };
+    let leaf = std::sync::Arc::make_mut(&mut reference.project).comp_mut(inner).unwrap().layer_mut(LayerId(solid)).unwrap();
+    leaf.props.prop_mut("effects/#1/gamma").unwrap().value = KV::Scalar(4.4 / 1.7);
+    leaf.props.prop_mut("transform/opacity").unwrap().value = KV::Scalar(4.4);
+    let want = reference.render(inner, Tick::ZERO, Default::default()).get(4, 4);
+    let got = s.render(main, Tick::ZERO, Default::default()).get(4, 4);
+    for ch in 0..4 {
+        assert!((got[ch] - want[ch]).abs() < 1e-5, "adopted shared-unit output: {got:?} != {want:?}");
+    }
 }

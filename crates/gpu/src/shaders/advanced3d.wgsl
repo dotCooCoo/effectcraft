@@ -14,7 +14,7 @@ struct Globals {
     ambient: vec4<f32>,
     // radiance first texture, mip count, irradiance texture, intensity
     env: vec4<f32>,
-    // rotation, any lighting (0/1), -, -
+    // rotation, lighting (bit 0) / shadow maps (bit 1), raster width, raster height
     env2: vec4<f32>,
 };
 
@@ -407,8 +407,41 @@ fn shadow_only_amount(unlit: bool, normal: vec3<f32>, front: bool, pos: vec3<f32
     return amount;
 }
 
+// Hardware rasterizers may snap projected vertices before interpolating their attributes.
+// Recover the original triangle-plane point at the exact pixel center, matching the CPU
+// reference independently of that implementation-specific subpixel grid.
+fn pixel_center_position(p: vec3<f32>, pixel: vec2<f32>) -> vec3<f32> {
+    let px = dpdx(p);
+    let py = dpdy(p);
+    let c = g.clip * vec4<f32>(p, 1.0);
+    let cx = dpdx(c);
+    let cy = dpdy(c);
+    let pixel_ndc = vec2<f32>(2.0 * pixel.x / g.env2.z - 1.0, 1.0 - 2.0 * pixel.y / g.env2.w);
+    let a = cx.xy - pixel_ndc * cx.w;
+    let b = cy.xy - pixel_ndc * cy.w;
+    let r = pixel_ndc * c.w - c.xy;
+    let det = a.x * b.y - a.y * b.x;
+    // Reject a collapsed or ill-conditioned projected plane at f32 precision.
+    let scale = max(abs(a.x * b.y), abs(a.y * b.x));
+    if (!(abs(det) > scale * (8.0 * 1.1920928955078125e-7))) {
+        return p;
+    }
+    let delta = vec2<f32>(r.x * b.y - r.y * b.x, a.x * r.y - a.y * r.x) / det;
+    let corrected = p + px * delta.x + py * delta.y;
+    if (!all(abs(corrected) < vec3<f32>(1e30))) {
+        return p;
+    }
+    return corrected;
+}
+
 @fragment
 fn fs(i: VOut, @builtin(front_facing) front: bool) -> FOut {
+    var position = i.pos;
+    // The uniform scene flag keeps derivatives in uniform control flow and skips
+    // reconstruction entirely when no light has a shadow map.
+    if ((u32(g.env2.y) & 2u) != 0u) {
+        position = pixel_center_position(i.pos, i.clip.xy);
+    }
     let mb = i.material * MAT_STRIDE;
     let m0 = materials[mb];
     let m1 = materials[mb + 1u];
@@ -449,12 +482,12 @@ fn fs(i: VOut, @builtin(front_facing) front: bool) -> FOut {
         emissive = emissive * sample_tex(tex_em, i.uv).rgb;
     }
     var out: FOut;
-    out.depth = bitcast<u32>(dot(g.view_z.xyz, i.pos) + g.view_z.w);
+    out.depth = bitcast<u32>(dot(g.view_z.xyz, position) + g.view_z.w);
     if (shadows_only) {
-        out.color = vec4<f32>(0.0, 0.0, 0.0, alpha * shadow_only_amount(unlit || !accepts_lights, i.normal, front, i.pos));
+        out.color = vec4<f32>(0.0, 0.0, 0.0, alpha * shadow_only_amount(unlit || !accepts_lights, i.normal, front, position));
         return out;
     }
-    if (unlit || !accepts_lights || g.env2.y < 0.5) {
+    if (unlit || !accepts_lights || (u32(g.env2.y) & 1u) == 0u) {
         let c = rgb + emissive;
         out.color = vec4<f32>(c * alpha, alpha);
         return out;
@@ -492,7 +525,7 @@ fn fs(i: VOut, @builtin(front_facing) front: bool) -> FOut {
     if (g.eye.w > 0.5) {
         v = -g.fwd.xyz;
     } else {
-        v = norm3(g.eye.xyz - i.pos);
+        v = norm3(g.eye.xyz - position);
     }
     let diff_k = m4.z;
     let spec_k = m4.w;
@@ -507,7 +540,7 @@ fn fs(i: VOut, @builtin(front_facing) front: bool) -> FOut {
         let l3 = lights[lb + 3u];
         let l4 = lights[lb + 4u];
         let kind = u32(l0.w);
-        let tl = to_light(kind, l0.xyz, l1.xyz, i.pos);
+        let tl = to_light(kind, l0.xyz, l1.xyz, position);
         let to_l = tl.xyz;
         let dist = tl.w;
         let k = attenuation(kind, u32(l3.x), l3.y, l3.z, l2.w, l1.w, l1.xyz, to_l, dist);
@@ -520,7 +553,7 @@ fn fs(i: VOut, @builtin(front_facing) front: bool) -> FOut {
         }
         var sh = 1.0;
         if (receives_shadows) {
-            sh = light_shadow(li, kind, l0.xyz, i32(l3.w), l4.x, i.pos, ng, n_l);
+            sh = light_shadow(li, kind, l0.xyz, i32(l3.w), l4.x, position, ng, n_l);
         }
         let b = brdf(rgb, metallic, rough, spec_k, diff_k, n, v, to_l);
         acc = acc + b * l2.xyz * k * sh;

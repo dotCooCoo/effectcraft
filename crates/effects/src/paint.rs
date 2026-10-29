@@ -847,7 +847,7 @@ pub fn paint_strokes(ctx: &EffectCtx, buf: Buf, strokes: &[&Stroke], on_transpar
 
 /// Is `g` a Paint effect instance?
 pub fn is_paint(g: &PropGroup) -> bool {
-    matches!(&g.kind, GroupKind::Effect { effect } if effect == ID)
+    matches!(&g.kind, GroupKind::Effect { effect, .. } if effect == ID)
 }
 
 /// Next stroke name for a kind (`Brush 4`).

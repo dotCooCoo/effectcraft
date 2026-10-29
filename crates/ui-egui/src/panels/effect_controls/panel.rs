@@ -63,7 +63,7 @@ struct EditorCx<'a> {
 
 /// An effect's custom editor (curves, levels, roto...), or the histogram-only fallback.
 fn effect_editor(app: &mut EffectcraftApp, ui: &mut egui::Ui, cx: &EditorCx, g: &PropGroup, er: Rect, actions: &mut Actions) {
-    let GroupKind::Effect { effect } = &g.kind else { return };
+    let GroupKind::Effect { effect, .. } = &g.kind else { return };
     match effect.as_str() {
         "ec.color.curves" => curves_editor(app, ui, cx.bp, cx.layer, g, cx.ectx, er, actions),
         effectcraft_engine::effects::warp_stab::ID => warp_editor(app, ui, cx.bp, cx.layer, g, er, actions),
@@ -199,7 +199,7 @@ pub fn show(app: &mut EffectcraftApp, ui: &mut egui::Ui, rect: Rect) {
     // Header tops, for drag-to-reorder.
     let mut tops: Vec<(u64, f32)> = vec![];
     for (fi, g) in fx.iter().enumerate() {
-        let GroupKind::Effect { effect } = &g.kind else { continue };
+        let GroupKind::Effect { effect, .. } = &g.kind else { continue };
         // The header draws the effect's name in the interface language; the automation labels
         // below keep the property tree's name, which is the registry's English name (#821).
         let shown = crate::i18n::effects::group(effect, &g.name);

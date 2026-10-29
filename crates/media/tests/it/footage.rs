@@ -40,12 +40,103 @@ fn ffmpeg_fixture(name: &str, args: &[&str]) -> Option<PathBuf> {
     let tmp = out.with_file_name(format!("tmp-{}-{:?}.{ext}", std::process::id(), std::thread::current().id()).replace(['(', ')'], ""));
     let st = Command::new("ffmpeg").args(["-hide_banner", "-loglevel", "error", "-y"]).args(args).arg(&tmp).status().expect("run ffmpeg");
     assert!(st.success(), "ffmpeg failed for {name}");
-    if std::fs::rename(&tmp, &out).is_err() {
-        // Another test made it first; on Windows the rename fails while that test has it open.
-        let _ = std::fs::remove_file(&tmp);
-        assert!(out.exists(), "rename {} to {name} failed", tmp.display());
-    }
+    publish_fixture(&tmp, &out)
+        .unwrap_or_else(|error| panic!("publish {} to {} failed: {error} (OS {:?})", tmp.display(), out.display(), error.raw_os_error()));
     Some(out)
+}
+
+/// Publish output made beside its destination. A scanner can briefly hold a newly written
+/// file/directory on Windows; preserve that output unless another complete fixture won the race.
+fn publish_fixture(temporary: &Path, destination: &Path) -> std::io::Result<()> {
+    let mut retries = 0;
+    loop {
+        match std::fs::rename(temporary, destination) {
+            Ok(()) => return Ok(()),
+            Err(_) if destination.exists() => {
+                if temporary.is_dir() {
+                    let _ = std::fs::remove_dir_all(temporary);
+                } else {
+                    let _ = std::fs::remove_file(temporary);
+                }
+                return Ok(());
+            }
+            Err(error)
+                if cfg!(windows)
+                    && (matches!(error.raw_os_error(), Some(32 | 33)) || (error.raw_os_error() == Some(5) && temporary.is_dir()))
+                    && retries < 9 =>
+            {
+                retries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(20 * retries));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn publish_test_paths(label: &str) -> (PathBuf, PathBuf) {
+    let dir = fixtures().join(format!("publish-{label}-{}-{:?}", std::process::id(), std::thread::current().id()).replace(['(', ')'], ""));
+    std::fs::create_dir_all(&dir).unwrap();
+    (dir.join("temporary.bin"), dir.join("published.bin"))
+}
+
+#[test]
+fn publishing_a_fixture_preserves_output_on_a_real_error() {
+    let (temporary, destination) = publish_test_paths("missing-parent");
+    std::fs::write(&temporary, b"original output").unwrap();
+    let invalid = destination.join("missing-parent").join("output.bin");
+    let error = publish_fixture(&temporary, &invalid).unwrap_err();
+    assert!(error.raw_os_error().is_some(), "the actual filesystem error is retained");
+    assert_eq!(std::fs::read(&temporary).unwrap(), b"original output");
+    assert!(!invalid.exists());
+}
+
+#[test]
+#[cfg(windows)]
+fn publishing_a_fixture_retries_a_sharing_violation() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let (temporary, destination) = publish_test_paths("sharing");
+    std::fs::write(&temporary, b"complete fixture").unwrap();
+    let held = std::fs::OpenOptions::new().read(true).share_mode(1).open(&temporary).unwrap();
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        drop(held);
+    });
+    publish_fixture(&temporary, &destination).unwrap();
+    release.join().unwrap();
+    assert_eq!(std::fs::read(&destination).unwrap(), b"complete fixture");
+    assert!(!temporary.exists());
+}
+
+#[test]
+#[cfg(windows)]
+fn publishing_a_sequence_retries_a_locked_child_file() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let (temporary, destination) = publish_test_paths("sequence-sharing");
+    std::fs::create_dir(&temporary).unwrap();
+    let frame = temporary.join("frame.bin");
+    std::fs::write(&frame, b"complete sequence frame").unwrap();
+    let held = std::fs::OpenOptions::new().read(true).share_mode(1).open(&frame).unwrap();
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        drop(held);
+    });
+    publish_fixture(&temporary, &destination).unwrap();
+    release.join().unwrap();
+    assert_eq!(std::fs::read(destination.join("frame.bin")).unwrap(), b"complete sequence frame");
+    assert!(!temporary.exists());
+}
+
+#[test]
+#[cfg(windows)]
+fn publishing_a_fixture_accepts_only_an_existing_race_winner() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let (temporary, destination) = publish_test_paths("race");
+    std::fs::write(&temporary, b"other output").unwrap();
+    std::fs::write(&destination, b"winner").unwrap();
+    let held = std::fs::OpenOptions::new().read(true).share_mode(1).open(&destination).unwrap();
+    publish_fixture(&temporary, &destination).unwrap();
+    drop(held);
+    assert_eq!(std::fs::read(&destination).unwrap(), b"winner");
 }
 
 fn h264_mp4() -> Option<PathBuf> {
@@ -152,9 +243,8 @@ fn png_sequence() -> Option<PathBuf> {
             .status()
             .expect("ffmpeg");
         assert!(st.success());
-        if std::fs::rename(&tmp, &dir).is_err() {
-            let _ = std::fs::remove_dir_all(&tmp); // another process won the race
-        }
+        publish_fixture(&tmp, &dir)
+            .unwrap_or_else(|error| panic!("publish {} to {} failed: {error} (OS {:?})", tmp.display(), dir.display(), error.raw_os_error()));
     }
     Some(dir.join("seq_0001.png"))
 }
