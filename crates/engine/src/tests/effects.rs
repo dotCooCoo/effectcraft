@@ -781,15 +781,16 @@ fn opening_an_old_cineon_converter_project_keeps_what_it_renders() {
     s3.execute("file.open", json!({"path": path})).unwrap();
     let _ = std::fs::remove_dir_all(dir);
     check(&s3);
-    // A new instance on top: version 2, and its default Gamma 1 gives linear output.
+    // A new instance on top is version 2 with Gamma 1.7.
     let top = s3.execute("layer.newSolid", json!({"color": [0.4, 0.5, 0.6], "width": 8, "height": 8})).unwrap()["layer"].as_u64().unwrap();
     let top_fx = apply(&mut s3, top, "Cineon Converter");
     s3.execute("prop.set", json!({"layer": top, "path": "effects/#1/highlightRolloff", "value": 0.0})).unwrap();
     assert_eq!(effect_group(&s3, top, top_fx).prop("version").unwrap().value, KV::Scalar(2.0));
+    assert_eq!(effect_group(&s3, top, top_fx).prop("gamma").unwrap().value, KV::Scalar(1.7));
     let got = s3.render(cid, Tick::ZERO, Default::default()).get(4, 4);
     for c in 0..3 {
-        let want = cineon_version_1(input[c], 1.7);
-        assert!((got[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want} linear", got[c]);
+        let want = cineon_version_1(input[c], 1.7 * 1.7);
+        assert!((got[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want}", got[c]);
     }
 }
 
@@ -830,7 +831,7 @@ fn opening_an_old_project_keeps_an_overridden_cineon_gamma() {
 /// `docs/architecture.md` describes. The file is still schema 2. That build's registry has no
 /// Version parameter: opening keeps the saved one, and Gamma is read on version 1's scale. A
 /// version 1 instance holds its Gamma as saved before, so it renders there as it did; a version 2
-/// instance's Gamma 1 renders there as a version 1 Gamma of 1.
+/// instance's Gamma 1.7 renders there as a version 1 Gamma of 1.7.
 #[test]
 fn a_project_saved_now_opens_in_an_older_build_as_documented() {
     let mut s = Session::default();
@@ -885,20 +886,19 @@ fn a_project_saved_now_opens_in_an_older_build_as_documented() {
         (g.get("version").map(|p| p.value.clone()), g.get("gamma").unwrap().value.clone())
     };
     assert_eq!(opened_in_older(old_fx), (Some(KV::Scalar(1.0)), KV::Scalar(2.2)));
-    assert_eq!(opened_in_older(new_fx), (Some(KV::Scalar(2.0)), KV::Scalar(1.0)));
+    assert_eq!(opened_in_older(new_fx), (Some(KV::Scalar(2.0)), KV::Scalar(1.7)));
 
     // This build renders the version 1 instance as the older build does: Gamma 2.2 read as a
-    // version 1 Gamma. The new instance gives linear output here, and the older build reads its
-    // Gamma 1 as a version 1 Gamma of 1.
+    // version 1 Gamma. The older build reads the new instance's Gamma 1.7 on the version 1 scale.
     let got_new = s2.render(cid, Tick::ZERO, Default::default()).get(4, 4);
     s2.execute("layer.setSwitch", json!({"layers": [new], "switch": "video", "value": false})).unwrap();
     let got_old = s2.render(cid, Tick::ZERO, Default::default()).get(4, 4);
     for c in 0..3 {
         let want = cineon_version_1(input[c], 2.2);
         assert!((got_old[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want} in the older build", got_old[c]);
-        let linear = cineon_version_1(input[c], 1.7);
-        assert!((got_new[c] - linear).abs() < 1e-4, "channel {c}: {} rendered, {linear} linear", got_new[c]);
-        assert!((cineon_version_1(input[c], 1.0) - linear).abs() > 1e-3, "channel {c}: the older build renders Gamma 1 darker");
+        let want_new = cineon_version_1(input[c], 1.7 * 1.7);
+        assert!((got_new[c] - want_new).abs() < 1e-4, "channel {c}: {} rendered, {want_new}", got_new[c]);
+        assert!((cineon_version_1(input[c], 1.7) - want_new).abs() > 1e-3, "channel {c}: the older build renders Gamma 1.7 differently");
     }
 }
 

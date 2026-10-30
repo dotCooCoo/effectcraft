@@ -148,7 +148,8 @@ fn cineon(ctx: &EffectCtx, mut b: Buf) -> Buf {
         gamma: cineon_gamma(ctx.params) as f32,
         rolloff: ctx.params.f("highlightRolloff") as f32,
     };
-    let std = Cineon { black: 95.0, white: 685.0, ib: 0.0, iw: 1.0, gamma: 1.0, rolloff: c.rolloff };
+    let reference_gamma = if ctx.params.f("version") < 2.0 { 1.0 } else { CINEON_V1_LINEAR_GAMMA as f32 };
+    let std = Cineon { black: 95.0, white: 685.0, ib: 0.0, iw: 1.0, gamma: reference_gamma, rolloff: c.rolloff };
     let kind = ctx.params.e("conversionType");
     b.img.map_straight(|v| {
         v.map(|x| match kind {
@@ -390,7 +391,7 @@ pub fn specs() -> Vec<EffectSpec> {
                 p("internalBlackPoint", "Internal Black Point", num(0.0), slider(-1.0, 2.0, 0.0, 1.0, 3)),
                 p("tenBitWhitePoint", "10 Bit White Point", num(685.0), slider(0.0, 1023.0, 0.0, 1023.0, 0)),
                 p("internalWhitePoint", "Internal White Point", num(1.0), slider(-1.0, 2.0, 0.0, 1.0, 3)),
-                p("gamma", "Gamma", num(1.0), slider(0.05, 5.0, 0.1, 5.0, 2)),
+                p("gamma", "Gamma", num(1.7), slider(0.05, 5.0, 0.1, 5.0, 2)),
                 p("highlightRolloff", "Highlight Rolloff", num(20.0), slider(0.0, 100.0, 0.0, 100.0, 0)),
                 // 2: Gamma 1 gives linear output (`cineon_gamma`).
                 p("version", "Version", num(2.0), ParamUi::Hidden),
@@ -509,7 +510,7 @@ mod tests {
         }
     }
 
-    /// Gamma 1 (the default) gives linear light: Kodak's printing-density curve with nothing
+    /// Gamma 1 gives linear light: Kodak's printing-density curve with nothing
     /// raised, so code 400 is (10^(-0.95) - 10^(-1.9667)) / (1 - 10^(-1.9667)) = 0.10251. A larger
     /// Gamma lightens the midtones (`lin^(1/gamma)`), and Linear to Log undoes it.
     #[test]
@@ -520,12 +521,26 @@ mod tests {
         let lighter = c(2.0).log_to_lin(400.0 / 1023.0);
         assert!((lighter - 0.10251f32.sqrt()).abs() < 1e-4, "{lighter}");
         assert!((c(2.0).lin_to_log(lighter) - 400.0 / 1023.0).abs() < 1e-4);
-        let out = run("ec.utility.cineon", &[], {
+        let out = run("ec.utility.cineon", &[("gamma", num(1.0))], {
             let mut img = Image::new(1, 1);
             img.set(0, 0, [400.0 / 1023.0, 400.0 / 1023.0, 400.0 / 1023.0, 1.0]);
             img
         });
-        assert!((out.img.data[0][0] - 0.10251).abs() < 1e-4, "the default Gamma is linear: {:?}", out.img.data[0]);
+        assert!((out.img.data[0][0] - 0.10251).abs() < 1e-4, "Gamma 1 is linear: {:?}", out.img.data[0]);
+    }
+
+    #[test]
+    fn cineon_log_to_log_defaults_keep_code_values() {
+        let codes = [95.0f32, 250.0, 400.0, 560.0, 685.0];
+        let mut img = Image::new(codes.len() as u32, 1);
+        for (x, code) in codes.iter().enumerate() {
+            let value = code / 1023.0;
+            img.set(x as u32, 0, [value, value, value, 1.0]);
+        }
+        let out = run("ec.utility.cineon", &[("conversionType", Value::Enum(2))], img);
+        for (x, code) in codes.iter().enumerate() {
+            assert!((out.img.data[x][0] - code / 1023.0).abs() < 1e-6, "code {code}: {}", out.img.data[x][0]);
+        }
     }
 
     /// A version 1 instance renders as version 1 did: Gamma 1.7 gives linear light, and a

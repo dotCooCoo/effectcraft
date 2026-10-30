@@ -162,9 +162,8 @@ pub fn legacy_default(effect: &str, param: &str) -> Option<Value> {
         // Transition: Block Dissolve's blocks had hard edges.
         ("ec.transition.blockdissolve", "softEdges") => Value::Bool(false),
         // Utility: Cineon Converter version 1, where Gamma 1.7 gave linear output
-        // (`crate::utility::cineon_gamma`). Its default Gamma was 1.7.
+        // (`crate::utility::cineon_gamma`).
         ("ec.utility.cineon", "version") => Value::Scalar(1.0),
-        ("ec.utility.cineon", "gamma") => Value::Scalar(crate::utility::CINEON_V1_LINEAR_GAMMA),
         _ => return None,
     })
 }
@@ -769,7 +768,13 @@ not a stroke",
         let data = effectcraft_track::roto::RotoData {
             base: Some(0),
             span: [0, 10],
-            strokes: vec![effectcraft_track::roto::Stroke { kind: effectcraft_track::roto::StrokeKind::Fg, frame: 0, radius: 5.0, points: vec![[2.0, 2.0]] }],
+            strokes: vec![effectcraft_track::roto::Stroke {
+                kind: effectcraft_track::roto::StrokeKind::Fg,
+                frame: 0,
+                radius: 5.0,
+                points: vec![[2.0, 2.0]],
+                object: 0,
+            }],
         };
         roto.get_mut(crate::roto::STROKES).unwrap().value = Value::Str(data.to_json());
         to_effect_space(spec, &mut roto, SIZE, D, &own);
@@ -793,7 +798,7 @@ not a stroke",
         let mut next = 1;
         let fresh = instantiate(spec, &mut Ids(&mut next), "Cineon Converter", [100.0, 50.0]);
         assert_eq!(fresh.get("version").unwrap().value, Value::Scalar(2.0));
-        assert_eq!(fresh.get("gamma").unwrap().value, Value::Scalar(1.0));
+        assert_eq!(fresh.get("gamma").unwrap().value, Value::Scalar(1.7));
         // Gamma, its keyframes and its expression are kept as saved.
         let mut g = fresh.clone();
         take_prop(&mut g, "version");

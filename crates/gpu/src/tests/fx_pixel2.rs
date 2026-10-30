@@ -194,6 +194,11 @@ fn composites_and_colour() {
 }
 
 #[test]
+fn cineon_log_to_log_defaults_match_cpu() {
+    env_case_allow("ec.utility.cineon", &[("conversionType", e(2))], 0.005);
+}
+
+#[test]
 fn stylize() {
     let _flips = allow_llvmpipe_boundary_flips();
     for (done, flags) in

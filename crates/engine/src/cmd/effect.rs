@@ -851,6 +851,7 @@ fn copy(s: &mut Session, p: &Value) -> Result<Value> {
     s.state.key_clipboard.clear();
     s.state.keyframe_text = None;
     s.state.contents_clipboard.clear();
+    s.state.mask_clipboard.clear();
     s.state.link_clipboard = None;
     s.state.clip_is_keys = false;
     let n = groups.len();
@@ -935,8 +936,7 @@ fn reset(s: &mut Session, p: &Value) -> Result<Value> {
     }
     .ok_or_else(|| bad("effect.reset", "unknown effect"))?;
     let name = g.name.clone();
-    // A Cineon Converter keeps its Version, so its other Gamma keyframes keep their scale, and its
-    // Gamma resets to that version's default.
+    // Reset keeps a Cineon Converter's Version.
     let cineon_version = if spec.id == "ec.utility.cineon" { g.get("version").map(|v| v.value.as_f64()) } else { None };
     s.edit(&format!("Reset {name}"), None, |proj, _| {
         let g = layer_mut(proj, cid, lid)?.props.find_group_mut(uid).ok_or_else(|| bad("effect.reset", "gone"))?;
@@ -944,13 +944,9 @@ fn reset(s: &mut Session, p: &Value) -> Result<Value> {
             if ps.id == "version" && cineon_version.is_some() {
                 continue;
             }
-            let default = match cineon_version {
-                Some(v) if ps.id == "gamma" && v < 2.0 => effectcraft_effects::migrate::legacy_default(spec.id, ps.id),
-                _ => None,
-            };
             // (`group/param` ids live in twirl-down groups.)
             if let Some(pr) = g.prop_mut(ps.id) {
-                pr.set_value_at(lt, default.unwrap_or_else(|| effectcraft_effects::default_value(ps, size)));
+                pr.set_value_at(lt, effectcraft_effects::default_value(ps, size));
             }
         }
         Ok(())

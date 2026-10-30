@@ -1,6 +1,6 @@
 # Architecture
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (crate table checked against `crates/`: effect count 306, VP9 inter frames) · **Target:** Adobe After Effects 2026
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-29 · **Change:** minor (SAM 2 crate added to the layer table) · **Target:** Adobe After Effects 2026
 
 EffectCraft is a stack of small Rust crates. The engine knows nothing about the user interface;
 the egui frontend, the command-line tool and the MCP server all sit on top of the same `Session`
@@ -39,6 +39,7 @@ cpal or muda. Everything in L0 to L4, the egui UI and the web app also build for
 | L3 | `expr` | The expression engine (JavaScript via boa) with the After Effects object model |
 | L3 | `export` | Render queue encoding: H.264, HEVC and AV1 MP4, ProRes, WebM (VP9 + alpha or AV1, Opus), PNG/JPEG/TIFF/EXR/Targa sequences, GIF, WAV/AIFF |
 | L3 | `gpu` | The GPU compositor and GPU effects on wgpu compute shaders (Metal, Vulkan, Direct3D 12, WebGPU), checked against the CPU renderer |
+| L3 | `sam2` | SAM 2.1 image segmentation and video object tracking for Roto Brush, with candle CPU inference and optional wgpu acceleration; native only, empty on wasm32, with user-installed weights |
 | L3 | `interchange` | Premiere Pro interop through timeline interchange (FCP7 XML, FCPXML, OTIO, EDL, AAF, OMF via FilmCraft's `filmcraft-interchange`): sequences ↔ compositions (§6a) |
 | L3 | `lottie` | Lottie JSON / dotLottie import and export (layers, precomps, eased and spatial keyframes, shapes, masks, mattes) with a warnings list for what Lottie cannot express |
 | L3 | `plugin` | Effect plug-ins: loads sandboxed WebAssembly effect modules (plug-in API v1; the wasmi interpreter behind the `wasm` feature, on for native hosts) into the effect registry ([plugins.md](plugins.md)) |
@@ -123,18 +124,19 @@ did not change.
 
 Cineon Converter has a hidden Version parameter (`version`). In version 2, Gamma 1 gives linear
 output: Log to Linear raises the linear value to `1 / gamma`. In version 1, Gamma 1.7 gives linear
-output: Log to Linear raises the linear value to `1.7 / gamma`. A new instance is version 2. An
-instance saved before the parameter existed opens as version 1 (`migrate::legacy_default`), with
-its Gamma, keyframes and expressions unchanged, and renders as it did. A whole Cineon Converter
-applied from an animation preset saved before the parameter existed is also version 1. Opening a
-project does not change any expression or the project schema. Reset keeps an instance's Version
-and sets Gamma to that version's default (1.7 for version 1).
+output: Log to Linear raises the linear value to `1.7 / gamma`. A new instance is version 2 with
+Gamma 1.7. An instance saved before the parameter existed opens as version 1
+(`migrate::legacy_default`), with its Gamma, keyframes and expressions unchanged, and renders as
+it did. A whole Cineon Converter applied from an animation preset saved before the parameter
+existed is also version 1. Opening a project does not change any expression or the project schema.
+Reset keeps an instance's Version and sets Gamma to 1.7.
 
 A project saved with the Version parameter opens in an earlier build, since its schema is still 2.
 That build keeps the Version parameter it does not know and reads every Gamma on version 1's
 scale. A version 1 instance renders there as it did before. A version 2 instance's Gamma is read
-there as a version 1 Gamma, so its default Gamma 1 renders darker than linear. Earlier builds
-apply format 3 animation presets the same way and ignore `cineonVersion`.
+there as a version 1 Gamma, so its default Gamma 1.7 renders as linear. It renders lighter in this
+build. Earlier builds apply format 3 animation presets the same way and ignore
+`cineonVersion`.
 
 Animation presets are format 3 (`effectcraftAnimationPreset: 3`). A saved property that is a
 Cineon Converter's Gamma records that instance's version in `cineonVersion`. So does an Essential
