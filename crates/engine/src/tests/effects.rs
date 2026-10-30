@@ -736,6 +736,12 @@ fn cineon_version_1(v: f32, gamma: f32) -> f32 {
     ((10f32.powf((v * 1023.0 - 685.0) * 0.002 / 0.6) - off) / (1.0 - off)).max(0.0).powf(1.7 / gamma)
 }
 
+fn cineon_version_2(v: f32, gamma: f32) -> f32 {
+    let offset = 10f32.powf((95.0 - 685.0) * 0.002 / 0.6).powf(1.0 / gamma);
+    let exposure = 10f32.powf((v * 1023.0 - 685.0) * 0.002 / 0.6).powf(1.0 / gamma);
+    ((exposure - offset) / (1.0 - offset)).max(0.0)
+}
+
 /// A project saved before Cineon Converter version 2 opens with each instance at version 1,
 /// where Gamma 1.7 gives linear output: Gamma and its keyframes keep their saved values, and the
 /// frames render as they did. Saving and opening again changes nothing. A Cineon Converter
@@ -789,7 +795,7 @@ fn opening_an_old_cineon_converter_project_keeps_what_it_renders() {
     assert_eq!(effect_group(&s3, top, top_fx).prop("gamma").unwrap().value, KV::Scalar(1.7));
     let got = s3.render(cid, Tick::ZERO, Default::default()).get(4, 4);
     for c in 0..3 {
-        let want = cineon_version_1(input[c], 1.7 * 1.7);
+        let want = cineon_version_2(input[c], 1.7);
         assert!((got[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want}", got[c]);
     }
 }
@@ -896,7 +902,7 @@ fn a_project_saved_now_opens_in_an_older_build_as_documented() {
     for c in 0..3 {
         let want = cineon_version_1(input[c], 2.2);
         assert!((got_old[c] - want).abs() < 1e-4, "channel {c}: {} rendered, {want} in the older build", got_old[c]);
-        let want_new = cineon_version_1(input[c], 1.7 * 1.7);
+        let want_new = cineon_version_2(input[c], 1.7);
         assert!((got_new[c] - want_new).abs() < 1e-4, "channel {c}: {} rendered, {want_new}", got_new[c]);
         assert!((cineon_version_1(input[c], 1.7) - want_new).abs() > 1e-3, "channel {c}: the older build renders Gamma 1.7 differently");
     }

@@ -122,9 +122,13 @@ their bottom-right quarter. Tracking data of effects that analyse footage (Warp 
 Camera Tracker, Mocha shape) is left as it is: footage has a source rectangle, whose effect space
 did not change.
 
-Cineon Converter has a hidden Version parameter (`version`). In version 2, Gamma 1 gives linear
-output: Log to Linear raises the linear value to `1 / gamma`. In version 1, Gamma 1.7 gives linear
-output: Log to Linear raises the linear value to `1.7 / gamma`. A new instance is version 2 with
+Cineon Converter has a hidden Version parameter (`version`). In version 2, Log to Linear raises
+the exposure to `1 / gamma` before subtracting the black offset and normalizing at the white
+point. Highlight Rolloff then limits highlights. Linear to Log reverses those operations. Log to
+Log raises the normalized code value to `1 / gamma` at the default black and white points. Custom
+points use a Gamma 1 conversion before that power. In version 1, Log to Linear raises the
+black-offset normalized value to `1.7 / gamma`, and Log to Log uses its original reference curve.
+A new instance is version 2 with
 Gamma 1.7. An instance saved before the parameter existed opens as version 1
 (`migrate::legacy_default`), with its Gamma, keyframes and expressions unchanged, and renders as
 it did. A whole Cineon Converter applied from an animation preset saved before the parameter
@@ -145,6 +149,9 @@ through nested comps. The Gamma properties of format 1 and 2 presets are version
 Gamma to a Cineon Converter on the layer sets that instance's Version to the recorded one.
 Applying it to an Essential Properties value converts the value, its keyframes and their speeds to
 the version of the Gammas that the control drives (dividing by 1.7 from version 1 to version 2).
+That conversion aligns the linear points, but the two versions use different curves at other
+Gamma values. Interpret Footage Cineon Settings continues to apply Gamma after black-offset
+normalization, so its output agrees with version 2 Converter at Gamma 1.
 Expressions in a preset are applied as saved, and an Essential Properties Gamma with an enabled
 expression that was saved on another version is skipped.
 
